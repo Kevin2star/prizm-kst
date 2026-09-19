@@ -108,6 +108,16 @@ function CopyIcon() {
 }
 
 function MainPage() {
+  // 로그인한 사용자 정보
+  const nickname =
+    sessionStorage.getItem("prizm_test_nickname");
+
+  const email =
+    sessionStorage.getItem("prizm_test_email");
+
+  const initial =
+    nickname?.trim().charAt(0).toUpperCase();
+
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showModal, setShowModal] = useState(false);
