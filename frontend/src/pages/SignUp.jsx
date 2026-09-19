@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import "./SignUp.css";
 
-function Signup() {
+function SignUp() {
   const navigate = useNavigate();
 
   const [nickname, setNickname] = useState("");
@@ -15,7 +15,7 @@ function Signup() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    // 비밀번호가 서로 다른 경우만 막기
+    // 비밀번호 확인
     if (password !== passwordConfirm) {
       alert("비밀번호가 서로 일치하지 않습니다.");
       return;
@@ -24,7 +24,7 @@ function Signup() {
     setLoading(true);
 
     // 테스트용:
-    // Supabase 회원가입은 시도하지만 실패해도 메인페이지로 이동
+    // Supabase 회원가입은 시도하지만 실패해도 무시
     try {
       const { error } = await supabase.auth.signUp({
         email,
@@ -37,26 +37,40 @@ function Signup() {
       });
 
       if (error) {
-        console.log("테스트 모드 - 회원가입 오류 무시:", error.message);
+        console.log(
+          "테스트 모드 - 회원가입 오류 무시:",
+          error.message
+        );
       }
     } catch (error) {
-      console.log("테스트 모드 - 회원가입 오류 무시:", error);
+      console.log(
+        "테스트 모드 - 회원가입 오류 무시:",
+        error
+      );
     }
 
-    // Supabase 가입 실패 시에도 MainPage에서
-    // 입력한 닉네임을 사용할 수 있도록 임시 저장
-    sessionStorage.setItem("prizm_test_nickname", nickname);
-    sessionStorage.setItem("prizm_test_email", email);
+    // 가입에 실패해도 입력한 정보를 MainPage에서
+    // 테스트할 수 있도록 임시 저장
+    sessionStorage.setItem(
+      "prizm_test_nickname",
+      nickname
+    );
+
+    sessionStorage.setItem(
+      "prizm_test_email",
+      email
+    );
 
     setLoading(false);
 
-    // 성공/실패 상관없이 무조건 메인페이지 이동
+    // 성공/실패 상관없이 메인페이지 이동
     navigate("/main");
   };
 
   return (
     <main className="auth-page">
       <section className="auth-card">
+
         <Link to="/" className="auth-logo">
           PRIZM
         </Link>
@@ -67,34 +81,52 @@ function Signup() {
           이메일로 가입하고 새로운 협업을 시작하세요.
         </p>
 
-        <form className="auth-form" onSubmit={handleSubmit}>
-          <label htmlFor="signup-nickname">닉네임</label>
+        <form
+          className="auth-form"
+          onSubmit={handleSubmit}
+        >
+          <label htmlFor="signup-nickname">
+            닉네임
+          </label>
+
           <input
             id="signup-nickname"
             type="text"
             placeholder="닉네임을 입력하세요"
             value={nickname}
-            onChange={(event) => setNickname(event.target.value)}
+            onChange={(event) =>
+              setNickname(event.target.value)
+            }
             required
           />
 
-          <label htmlFor="signup-email">이메일</label>
+          <label htmlFor="signup-email">
+            이메일
+          </label>
+
           <input
             id="signup-email"
             type="email"
             placeholder="example@email.com"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) =>
+              setEmail(event.target.value)
+            }
             required
           />
 
-          <label htmlFor="signup-password">비밀번호</label>
+          <label htmlFor="signup-password">
+            비밀번호
+          </label>
+
           <input
             id="signup-password"
             type="password"
             placeholder="6자 이상 입력하세요"
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            onChange={(event) =>
+              setPassword(event.target.value)
+            }
             minLength="6"
             required
           />
@@ -102,6 +134,7 @@ function Signup() {
           <label htmlFor="password-confirm">
             비밀번호 확인
           </label>
+
           <input
             id="password-confirm"
             type="password"
@@ -114,18 +147,29 @@ function Signup() {
             required
           />
 
-          <button type="submit" disabled={loading}>
-            {loading ? "가입 중..." : "회원가입"}
+          <button
+            type="submit"
+            disabled={loading}
+          >
+            {loading
+              ? "가입 중..."
+              : "회원가입"}
           </button>
         </form>
 
         <p className="auth-guide">
-          이미 계정이 있나요? <Link to="/">로그인</Link>
+          이미 계정이 있나요?{" "}
+          <Link to="/">
+            로그인
+          </Link>
         </p>
+
       </section>
     </main>
   );
 }
+
+export default SignUp;
 
 export default Signup;
 
