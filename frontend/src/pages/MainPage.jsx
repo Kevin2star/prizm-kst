@@ -98,44 +98,96 @@ function CopyIcon() {
 
 function MainPage() {
   const navigate = useNavigate();
-  const [nickname, setNickname] = useState("사용자");
-  const [email, setEmail] = useState("");
-  const [showProfile, setShowProfile] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [showModal, setShowModal] = useState(false);
+  const [nickname, setNickname] = useState(
+  sessionStorage.getItem("prizm_test_nickname") || ""
+);
 
-  const [sort, setSort] = useState("최근 수정순");
-  const [openSpaceMenu, setOpenSpaceMenu] = useState(null);
+const [email, setEmail] = useState(
+  sessionStorage.getItem("prizm_test_email") || ""
+);
 
-  const [editingSpace, setEditingSpace] = useState(null);
-  const [editingName, setEditingName] = useState("");
+const [showProfile, setShowProfile] = useState(false);
+const [showNotifications, setShowNotifications] = useState(false);
+const [showModal, setShowModal] = useState(false);
 
-  const [inviteSpace, setInviteSpace] = useState(null);
-  const [copiedType, setCopiedType] = useState("");
+const [sort, setSort] = useState("최근 수정순");
+const [openSpaceMenu, setOpenSpaceMenu] = useState(null);
 
-  const [joinCode, setJoinCode] = useState("");
-  const [joinMessage, setJoinMessage] = useState("");
-  const [joinStatus, setJoinStatus] = useState("");
+const [editingSpace, setEditingSpace] = useState(null);
+const [editingName, setEditingName] = useState("");
 
-  const [spaceName, setSpaceName] = useState("");
-  const [spaceDescription, setSpaceDescription] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
+const [inviteSpace, setInviteSpace] = useState(null);
+const [copiedType, setCopiedType] = useState("");
 
-  useEffect(() => {
-    const getUser = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
+const [joinCode, setJoinCode] = useState("");
+const [joinMessage, setJoinMessage] = useState("");
+const [joinStatus, setJoinStatus] = useState("");
+
+const [spaceName, setSpaceName] = useState("");
+const [spaceDescription, setSpaceDescription] = useState("");
+const [inviteEmail, setInviteEmail] = useState("");
+
+useEffect(() => {
+  const getUser = async () => {
+    try {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
+
       if (error) {
         console.error("사용자 정보 불러오기 실패:", error);
+
+        // Supabase에서 못 가져와도 회원가입 때 저장한 값 사용
+        setNickname(
+          sessionStorage.getItem("prizm_test_nickname") || ""
+        );
+
+        setEmail(
+          sessionStorage.getItem("prizm_test_email") || ""
+        );
+
         return;
       }
-      if (user) {
-        setNickname(user.user_metadata?.nickname || "사용자");
-        setEmail(user.email || "");
-      }
-    };
-    getUser();
-  }, []);
 
+      if (user) {
+        const savedNickname =
+          user.user_metadata?.nickname ||
+          sessionStorage.getItem("prizm_test_nickname") ||
+          "";
+
+        const savedEmail =
+          user.email ||
+          sessionStorage.getItem("prizm_test_email") ||
+          "";
+
+        setNickname(savedNickname);
+        setEmail(savedEmail);
+      } else {
+        setNickname(
+          sessionStorage.getItem("prizm_test_nickname") || ""
+        );
+
+        setEmail(
+          sessionStorage.getItem("prizm_test_email") || ""
+        );
+      }
+    } catch (error) {
+      console.error("사용자 정보 오류:", error);
+
+      setNickname(
+        sessionStorage.getItem("prizm_test_nickname") || ""
+      );
+
+      setEmail(
+        sessionStorage.getItem("prizm_test_email") || ""
+      );
+    }
+  };
+
+  getUser();
+}, []);
+  
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
