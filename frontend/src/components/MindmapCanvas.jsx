@@ -1,6 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react'
 import * as d3 from 'd3'
-import { colorForMajor } from './MindmapTree'
 
 const DEFAULT_COLOR = '#555555'
 
@@ -28,84 +27,24 @@ function wrapLines(text, maxChars = 16, maxLines = 2) {
 function statusSuffix(node) {
   if (node.status === 'PENDING' || node.status === 'PROCESSING') return ' · 분석 중'
   if (node.status === 'FAILED') return ' · 실패'
-  if (node.updated) return ' · 업데이트됨'
   return ''
 }
 
-function canExpand(node) {
-  return Boolean(
-    node.body ||
-      (node.items && node.items.length) ||
-      (node.children && node.children.length) ||
-      node.type === 'COMMON' ||
-      node.type === 'DIFF' ||
-      node.type === 'NOTES' ||
-      node.type === 'GROUP' ||
-      node.type === 'SOURCES' ||
-      node.type === 'SPACE',
-  )
-}
-
-function graphToChart(node, expanded) {
+function graphToChart(node, expanded, colorForNode) {
   if (!node) return null
   const open = node.type === 'SPACE' || expanded.has(node.id)
-  const kids = []
-
-  if (open && node.body) {
-    kids.push({
-      id: `${node.id}::body`,
-      name: String(node.body || '').replace(/\s+/g, ' ').trim(),
-      type: 'BODY',
-      color: DEFAULT_COLOR,
-      sourceArtifactIds: node.sourceArtifactIds,
-      expandable: false,
-    })
-  }
-
-  if (open) {
-    ;(node.items || []).forEach((item, index) => {
-      kids.push({
-        id: `${node.id}::item-${item.artifactId ?? index}`,
-        name: String(item.summary || '').replace(/\s+/g, ' ').trim(),
-        type: 'ITEM',
-        color: colorForMajor(item.nickname),
-        artifactId: item.artifactId,
-        nickname: item.nickname,
-        expandable: false,
-      })
-    })
-    ;(node.children || []).forEach((child) => {
-      kids.push(graphToChart(child, expanded))
-    })
-    if (node.sourceArtifactIds?.length && ['COMMON', 'DIFF', 'NOTES'].includes(node.type)) {
-      kids.push({
-        id: `${node.id}::sources`,
-        name: `소스 ${node.sourceArtifactIds.length}개 보기`,
-        type: 'SOURCE_LINK',
-        color: '#60a5fa',
-        sourceArtifactIds: node.sourceArtifactIds,
-        expandable: false,
-      })
-    }
-  }
-
+  const kids = open
+    ? (node.children || []).map((child) => graphToChart(child, expanded, colorForNode))
+    : undefined
   return {
     id: node.id,
     name: `${node.label || ''}${statusSuffix(node)}`,
     type: node.type,
-    color: node.nickname
-      ? colorForMajor(node.nickname)
-      : node.status === 'FAILED'
-        ? '#ef4444'
-        : node.status === 'PENDING' || node.status === 'PROCESSING'
-          ? '#f59e0b'
-          : node.updated
-            ? '#60a5fa'
-            : DEFAULT_COLOR,
+    color: colorForNode?.(node) || DEFAULT_COLOR,
     artifactId: node.artifactId,
-    sourceArtifactIds: node.sourceArtifactIds,
-    expandable: canExpand(node),
-    children: open && kids.length ? kids : undefined,
+    memberId: node.memberId,
+    expandable: Boolean(node.children && node.children.length),
+    children: kids && kids.length ? kids : undefined,
   }
 }
 
@@ -115,24 +54,14 @@ function handleNodeClick(d, handlers) {
     handlers.onOpenArtifact(node.artifactId)
     return
   }
-  if (node.type === 'ITEM' && node.artifactId) {
-    handlers.onOpenArtifact(node.artifactId)
-    return
-  }
-  if (node.type === 'SOURCE_LINK' && node.sourceArtifactIds?.length) {
-    handlers.onOpenSources(node.sourceArtifactIds)
-    return
-  }
-  if (node.type === 'BODY' && node.sourceArtifactIds?.length) {
-    handlers.onOpenSources(node.sourceArtifactIds)
-    return
-  }
   if (node.expandable && node.id) handlers.onToggle(node.id)
 }
 
-function drawTree(g, data, handlers) {
+function drawTree(g, data, handlers, selectedId) {
   const root = d3.hierarchy(data)
-  d3.tree().nodeSize([96, 320])(root)
+  d3.tree()
+    .nodeSize([112, 280])
+    .separation((a, b) => (a.parent === b.parent ? 1.25 : 1.6))(root)
   const nodes = root.descendants()
   const links = root.links()
 
@@ -161,11 +90,12 @@ function drawTree(g, data, handlers) {
 
   const nodeUpdate = nodeEnter.merge(nodeSelection)
   nodeUpdate.attr('transform', (d) => `translate(${d.y},${d.x})`)
+  nodeUpdate.classed('is-selected', (d) => d.data.id === selectedId || String(d.data.artifactId) === String(selectedId))
 
   nodeUpdate.each(function applyLabel(d) {
     const lines = wrapLines(d.data.name)
     const lineHeight = 18
-    const rectHeight = Math.max(36, 14 + lines.length * lineHeight)
+    const rectHeight = Math.max(40, 16 + lines.length * lineHeight)
     const group = d3.select(this)
     const text = group.select('text')
     text.selectAll('tspan').remove()
@@ -182,7 +112,7 @@ function drawTree(g, data, handlers) {
     text.selectAll('tspan').each(function measure() {
       textWidth = Math.max(textWidth, this.getComputedTextLength())
     })
-    const rectWidth = Math.max(textWidth + 24, 40)
+    const rectWidth = Math.max(textWidth + 24, 48)
     group
       .select('rect')
       .attr('width', rectWidth)
@@ -196,20 +126,20 @@ function drawTree(g, data, handlers) {
 }
 
 const MindmapCanvas = forwardRef(function MindmapCanvas(
-  { root, expanded, onToggle, onOpenArtifact, onOpenSources, onError },
+  { root, expanded, selectedId, colorForNode, onToggle, onOpenArtifact, onError },
   ref,
 ) {
   const wrapRef = useRef(null)
   const svgRef = useRef(null)
   const gRef = useRef(null)
   const zoomRef = useRef(null)
-  const handlersRef = useRef({ onToggle, onOpenArtifact, onOpenSources })
+  const handlersRef = useRef({ onToggle, onOpenArtifact })
 
-  const data = useMemo(() => graphToChart(root, expanded), [root, expanded])
+  const data = useMemo(() => graphToChart(root, expanded, colorForNode), [root, expanded, colorForNode])
 
   useEffect(() => {
-    handlersRef.current = { onToggle, onOpenArtifact, onOpenSources }
-  }, [onToggle, onOpenArtifact, onOpenSources])
+    handlersRef.current = { onToggle, onOpenArtifact }
+  }, [onToggle, onOpenArtifact])
 
   useImperativeHandle(ref, () => ({
     zoomIn() {
@@ -278,11 +208,11 @@ const MindmapCanvas = forwardRef(function MindmapCanvas(
   useEffect(() => {
     if (!gRef.current || !data) return
     try {
-      drawTree(gRef.current, data, handlersRef.current)
+      drawTree(gRef.current, data, handlersRef.current, selectedId)
     } catch (err) {
       onError?.(err)
     }
-  }, [data, onError])
+  }, [data, onError, selectedId])
 
   return <div className="nlm-canvas-wrap" ref={wrapRef} />
 })

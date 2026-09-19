@@ -179,12 +179,12 @@
   min-height: 0;
 }
 
-.nlm-pane-team { background: var(--nlm-panel); width: 20%; }
-.nlm-pane-ai { background: var(--nlm-bg); width: 20%; }
+.nlm-pane-team { background: var(--nlm-panel); width: 28%; }
 .nlm-pane-map {
   background: var(--nlm-panel);
-  width: 60%;
+  width: 72%;
   min-width: 300px;
+  flex: 1;
   position: relative;
   overflow: hidden;
 }
@@ -486,7 +486,7 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  padding: 16px 22px 16px 20px;
+  padding: 16px 28px 28px 20px;
 }
 
 .nlm-workspace .nlm-panel-resizer {
@@ -596,4 +596,218 @@
 @keyframes nlm-bounce {
   0%, 80%, 100% { transform: scale(0); }
   40% { transform: scale(1); }
+}
+
+.nlm-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  margin-bottom: 10px;
+  border: 1px dashed #4b5563;
+  border-radius: 10px;
+  color: var(--nlm-muted);
+  background: var(--nlm-input);
+  cursor: pointer;
+  text-align: center;
+  padding: 12px 16px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.nlm-dropzone input { display: none; }
+.nlm-dropzone:hover { border-color: var(--nlm-primary); color: var(--nlm-text); }
+.nlm-dropzone.is-disabled { opacity: 0.5; cursor: not-allowed; }
+
+.nlm-canvas-wrap .node.is-selected rect {
+  fill: #333;
+  stroke-width: 3px;
+}
+
+.nlm-detail-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.nlm-detail-panel .panel-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nlm-detail-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.nlm-detail-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.nlm-compare-btn {
+  background: var(--nlm-primary);
+  color: #111;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nlm-compare-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.nlm-detail-meta {
+  margin: 8px 0 0;
+  color: var(--nlm-muted);
+  font-size: 12px;
+}
+
+.nlm-detail-split {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.nlm-detail-section-title {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--nlm-muted);
+}
+
+.nlm-detail-analysis,
+.nlm-detail-raw {
+  min-height: 0;
+  overflow: auto;
+  border-radius: 12px;
+  padding: 14px 16px 16px;
+}
+
+.nlm-detail-analysis {
+  flex: 0 0 42%;
+  background: #191919;
+  border: 1px solid #3f3f46;
+}
+
+.nlm-detail-raw {
+  flex: 1;
+  background: #2b2b2b;
+  border: 1px solid #4b5563;
+  border-top: 3px solid #60a5fa;
+}
+
+.nlm-muted { color: var(--nlm-muted); font-size: 12px; margin: 0 0 10px; }
+
+.nlm-result-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.nlm-result-card {
+  background: #242424;
+  border: 1px solid #3f3f46;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.nlm-result-card h3,
+.nlm-raw-card h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.nlm-result-card p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--nlm-text);
+}
+
+.nlm-raw-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nlm-raw-card {
+  background: #1f1f1f;
+  border: 1px solid #52525b;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: grab;
+}
+
+.nlm-raw-card.is-dragging {
+  opacity: 0.85;
+  cursor: grabbing;
+}
+
+.nlm-raw-card header {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.nlm-raw-handle {
+  color: #9ca3af;
+  letter-spacing: -2px;
+  user-select: none;
+}
+
+.nlm-raw-sub {
+  margin: 0;
+  font-size: 11px;
+  color: var(--nlm-muted);
+}
+
+.nlm-raw-card pre {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  font-size: 12px;
+  color: var(--nlm-text);
+}
+
+.nlm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.nlm-modal {
+  width: min(480px, 100%);
+  background: var(--nlm-panel);
+  border: 1px solid var(--nlm-border);
+  border-radius: 12px;
+  padding: 20px 24px 24px;
+}
+
+.nlm-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.nlm-modal-head h2 { margin: 0; font-size: 16px; }
+.nlm-modal-copy {
+  color: var(--nlm-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 14px;
 }

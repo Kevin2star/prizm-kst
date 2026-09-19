@@ -37,14 +37,7 @@ export function connectSpaceRealtime(spaceId, onEvent) {
         emit({ type: 'ARTIFACT_ADDED', artifact: payload.new })
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'artifacts', filter }, (payload) => {
-        if (payload.new?.group_id && payload.new.group_id !== payload.old?.group_id) {
-          emit({ type: 'GROUPS_UPDATED', groupId: payload.new.group_id })
-        } else {
-          emit({ type: 'POLL' })
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'artifact_groups', filter }, (payload) => {
-        emit({ type: 'GROUPS_UPDATED', groupId: payload.new?.id })
+        emit({ type: 'ARTIFACT_UPDATED', artifact: payload.new })
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'members', filter }, (payload) => {
         emit({

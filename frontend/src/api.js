@@ -45,5 +45,4 @@ export const api = {
   createArtifact: (spaceId, body) =>
     request(`/spaces/${spaceId}/artifacts`, { method: 'POST', body: JSON.stringify(body) }),
   getArtifact: (id) => request(`/artifacts/${id}`),
-  getGroup: (id) => request(`/groups/${id}`),
 }

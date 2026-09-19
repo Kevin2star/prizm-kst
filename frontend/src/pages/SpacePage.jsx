@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
+import CompareUploadModal from '../components/CompareUploadModal'
+import DetailPanel from '../components/DetailPanel'
 import ErrorBoundary from '../components/ErrorBoundary'
-import GroupCards from '../components/GroupCards'
+import { FileDropZone, readUploadFile } from '../components/FileDropZone'
 import MindmapCanvas from '../components/MindmapCanvas'
-import MindmapTree, { collectMajors, colorForMajor, identityKey, memberColorMap } from '../components/MindmapTree'
-import SourcePanel from '../components/SourcePanel'
+import MindmapTree, { identityKey, memberColorMap } from '../components/MindmapTree'
 import { connectSpaceRealtime } from '../realtime'
 import { applySpaceSession, findSpaceMembership, joinSpaceByCode } from '../spaceMembership'
 import { clearSession, loadSession, sessionMatchesSpace } from '../session'
@@ -34,7 +35,14 @@ function Icon({ children }) {
   )
 }
 
-const SIDEBAR_PX = 64
+const SIDEBAR_PX = 72
+
+function collectNodeIds(node, set = new Set()) {
+  if (!node) return set
+  set.add(node.id)
+  ;(node.children || []).forEach((child) => collectNodeIds(child, set))
+  return set
+}
 
 function mapChatMessage(row, sessionMemberId, colorFn) {
   const memberId = row.memberId ?? row.member_id ?? null
@@ -108,8 +116,6 @@ export default function SpacePage() {
   const [space, setSpace] = useState(null)
   const [graph, setGraph] = useState(null)
   const [artifacts, setArtifacts] = useState([])
-  const [title, setTitle] = useState('')
-  const [content, setContent] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [expanded, setExpanded] = useState(new Set())
@@ -120,22 +126,14 @@ export default function SpacePage() {
   const [teamMessages, setTeamMessages] = useState([])
   const [spaceMembers, setSpaceMembers] = useState([])
   const [sendingTeam, setSendingTeam] = useState(false)
-  const [aiMessages, setAiMessages] = useState([
-    {
-      id: 'intro',
-      role: 'ai',
-      name: 'AI Assistant',
-      text: '자료의 내용을 입력하시면 분석하여 마인드맵에 자동으로 공통점/차이점 등을 분류해 드립니다.',
-    },
-  ])
+  const [compareOpen, setCompareOpen] = useState(false)
+  const [uploadError, setUploadError] = useState('')
 
   const workspaceRef = useRef(null)
   const teamRef = useRef(null)
-  const aiRef = useRef(null)
   const mapRef = useRef(null)
   const canvasRef = useRef(null)
   const teamScrollRef = useRef(null)
-  const aiScrollRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
@@ -204,23 +202,23 @@ export default function SpacePage() {
     ])
     let memberRows = spaceData.members
     if (!Array.isArray(memberRows)) {
-      const { data, error } = await supabase
+      const { data, error: memberError } = await supabase
         .from('members')
         .select('id, nickname, user_id')
         .eq('space_id', spaceId)
         .order('id', { ascending: true })
-      if (error) throw error
+      if (memberError) throw memberError
       memberRows = data || []
     }
     let messages = messageResult
     if (!Array.isArray(messages)) {
-      const { data, error } = await supabase
+      const { data, error: messageError } = await supabase
         .from('space_messages')
         .select('id, space_id, member_id, nickname, body, created_at')
         .eq('space_id', spaceId)
         .order('created_at', { ascending: true })
         .limit(200)
-      if (error) throw error
+      if (messageError) throw messageError
       messages = (data || []).map((row) => ({
         id: row.id,
         spaceId: row.space_id,
@@ -234,6 +232,11 @@ export default function SpacePage() {
     setSpaceMembers(memberRows)
     setGraph(graphData)
     setArtifacts(list)
+    setExpanded((current) => {
+      const next = collectNodeIds(graphData.root)
+      current.forEach((id) => next.add(id))
+      return next
+    })
     setTeamMessages((current) => {
       const incoming = (messages || []).map((row) =>
         mapChatMessage(row, session.memberId, () => '#4b5563'),
@@ -246,14 +249,10 @@ export default function SpacePage() {
         })
       return next
     })
-    setExpanded((current) => {
-      if (current.size > 0) return current
-      const next = new Set()
-      next.add(graphData.root.id)
-      ;(graphData.root.children || [])
-        .filter((child) => child.type === 'GROUP')
-        .forEach((child) => next.add(child.id))
-      return next
+    setPanel((current) => {
+      if (!current?.id) return current
+      const updated = list.find((item) => item.id === current.id)
+      return updated ? { ...current, ...updated } : current
     })
   }
 
@@ -261,6 +260,8 @@ export default function SpacePage() {
     setMapFailed(false)
     setTeamMessages([])
     setSpaceMembers([])
+    setPanel(null)
+    setCompareOpen(false)
     refresh().catch((err) => {
       if (isMissingSpace(err)) {
         clearSession()
@@ -319,6 +320,11 @@ export default function SpacePage() {
     return memberColors.get(identityKey(nickname, memberId)) || '#4b5563'
   }
 
+  const colorForNode = useCallback(
+    (node) => personColor(node?.nickname, node?.memberId),
+    [memberColors],
+  )
+
   const visibleTeamMessages = useMemo(() => {
     const chats = teamMessages.map((msg) => ({
       ...msg,
@@ -328,7 +334,7 @@ export default function SpacePage() {
     const uploads = artifacts.map((item) => ({
       id: `up-${item.id}`,
       name: item.nickname || '멤버',
-      text: `결과물을 올렸습니다: ${item.title}`,
+      text: `파일을 올렸습니다: ${item.sourceName || item.title}`,
       color: personColor(item.nickname, item.memberId),
       mine: String(item.memberId) === String(session.memberId),
       memberId: item.memberId == null ? null : String(item.memberId),
@@ -344,31 +350,27 @@ export default function SpacePage() {
   }, [artifacts, teamMessages, session.memberId, memberColors])
 
   useEffect(() => {
-    setAiMessages((current) =>
-      current.map((msg) => {
-        if (!msg.artifactId) return msg
-        const art = artifacts.find((item) => item.id === msg.artifactId)
-        if (!art) return msg
-        if (art.status === 'READY' && msg.status !== 'READY') {
-          return { ...msg, status: 'READY', pending: false, text: `'${art.title}' 분석을 마인드맵에 반영했습니다.` }
-        }
-        if (art.status === 'FAILED' && msg.status !== 'FAILED') {
-          return { ...msg, status: 'FAILED', pending: false, text: '분석에 실패했습니다. 원문은 볼 수 있습니다.' }
-        }
-        return msg
-      }),
-    )
-  }, [artifacts])
-
-  useEffect(() => {
     if (teamScrollRef.current) teamScrollRef.current.scrollTop = teamScrollRef.current.scrollHeight
   }, [visibleTeamMessages])
 
   useEffect(() => {
-    if (aiScrollRef.current) aiScrollRef.current.scrollTop = aiScrollRef.current.scrollHeight
-  }, [aiMessages])
-
-  const nicknames = useMemo(() => [...collectMajors(graph?.root)], [graph])
+    if (!panel?.id) return undefined
+    const latest = artifacts.find((item) => item.id === panel.id)
+    if (!latest) return undefined
+    const changed =
+      latest.status !== panel.status ||
+      latest.title !== panel.title ||
+      latest.comparisonCommon !== panel.comparisonCommon ||
+      latest.comparisonDiff !== panel.comparisonDiff
+    if (!changed) return undefined
+    let cancelled = false
+    api.getArtifact(panel.id).then((detail) => {
+      if (!cancelled) setPanel(detail)
+    }).catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [artifacts, panel?.id, panel?.status, panel?.title, panel?.comparisonCommon, panel?.comparisonDiff])
 
   function toggle(id) {
     setExpanded((current) => {
@@ -379,75 +381,48 @@ export default function SpacePage() {
     })
   }
 
-  async function onUpload(event) {
-    event.preventDefault()
-    const body = content.trim()
-    if (!body) return
-    const heading = title.trim() || body.slice(0, 40)
+  async function createFromFile({ content, name, parentId = null }) {
     setBusy(true)
     setError('')
-    setAiMessages((current) => [
-      ...current,
-      {
-        id: `u-${Date.now()}`,
-        role: 'user',
-        name: session.nickname,
-        color: personColor(session.nickname, session.memberId),
-        text: title.trim() ? `${heading}\n${body}` : body,
-        mine: true,
-      },
-      {
-        id: `p-${Date.now()}`,
-        role: 'ai',
-        name: 'AI Assistant',
-        pending: true,
-        text: '분석 중입니다…',
-      },
-    ])
+    setUploadError('')
     try {
       const created = await api.createArtifact(spaceId, {
         memberId: Number(session.memberId),
-        title: heading,
-        content: body,
+        content,
+        sourceName: name,
+        parentId,
       })
-      setArtifacts((current) => [created, ...current])
-      setTitle('')
-      setContent('')
-      setAiMessages((current) => {
-        const next = [...current]
-        const pendingIndex = [...next].reverse().findIndex((msg) => msg.pending)
-        if (pendingIndex >= 0) {
-          const idx = next.length - 1 - pendingIndex
-          next[idx] = {
-            ...next[idx],
-            artifactId: created.id,
-            status: created.status,
-            text: created.status === 'READY' ? `'${created.title}' 분석을 마인드맵에 반영했습니다.` : '분석을 시작했습니다. 마인드맵이 곧 갱신됩니다.',
-            pending: created.status === 'PENDING' || created.status === 'PROCESSING',
-          }
-        }
-        return next
+      setArtifacts((current) => {
+        const without = current.filter((item) => item.id !== created.id)
+        return [created, ...without]
       })
+      if (parentId) {
+        const detail = await api.getArtifact(created.id)
+        setPanel(detail)
+      }
       refresh().catch(() => {})
+      setCompareOpen(false)
     } catch (err) {
       setError(err.message)
-      setAiMessages((current) => [
-        ...current.filter((msg) => !msg.pending),
-        { id: `e-${Date.now()}`, role: 'ai', name: 'AI Assistant', text: err.message },
-      ])
+      setUploadError(err.message)
+      throw err
     } finally {
       setBusy(false)
     }
   }
 
-  async function openArtifact(id) {
-    const detail = await api.getArtifact(id)
-    setPanel({ title: detail.title, items: detail })
+  async function onRootFile(file) {
+    try {
+      const parsed = await readUploadFile(file)
+      await createFromFile({ content: parsed.content, name: parsed.name })
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
-  async function openSources(ids) {
-    const details = await Promise.all((ids || []).map((id) => api.getArtifact(id)))
-    setPanel({ title: `소스 ${details.length}개 보기`, items: details })
+  async function openArtifact(id) {
+    const detail = await api.getArtifact(id)
+    setPanel(detail)
   }
 
   async function copyCode() {
@@ -491,7 +466,7 @@ export default function SpacePage() {
           body: text,
         })
       } catch {
-        const { data, error } = await supabase
+        const { data, error: insertError } = await supabase
           .from('space_messages')
           .insert({
             space_id: Number(spaceId),
@@ -501,7 +476,7 @@ export default function SpacePage() {
           })
           .select('id, space_id, member_id, nickname, body, created_at')
           .single()
-        if (error) throw error
+        if (insertError) throw insertError
         saved = {
           id: data.id,
           spaceId: data.space_id,
@@ -525,6 +500,18 @@ export default function SpacePage() {
       setSendingTeam(false)
     }
   }
+
+  const treeFallback = graph?.root ? (
+    <div style={{ padding: 16, overflow: 'auto', height: '100%' }}>
+      <MindmapTree
+        node={graph.root}
+        expanded={expanded}
+        onToggle={toggle}
+        onOpenArtifact={openArtifact}
+        colorForNode={colorForNode}
+      />
+    </div>
+  ) : null
 
   return (
     <div className="nlm-workspace">
@@ -596,7 +583,7 @@ export default function SpacePage() {
           </div>
           <div className="nlm-scroll" ref={teamScrollRef}>
             {visibleTeamMessages.length === 0 ? (
-              <p className="nlm-empty">팀과 메시지를 주고받으세요. 같은 스페이스의 모든 멤버에게 공유됩니다.</p>
+              <p className="nlm-empty">팀과 메시지를 주고받으세요. 파일을 올리면 마인드맵 루트 아래에 노드가 생깁니다.</p>
             ) : (
               visibleTeamMessages.map((msg) => (
                 <div key={msg.id} className={`nlm-msg${msg.mine ? ' mine' : ''}`}>
@@ -609,6 +596,8 @@ export default function SpacePage() {
             )}
           </div>
           <div className="nlm-composer">
+            <FileDropZone disabled={busy} onFile={onRootFile} label={busy ? '업로드 중…' : '파일을 끌어다 놓거나 클릭해서 업로드'} />
+            {error ? <p className="nlm-error">{error}</p> : null}
             <div className="nlm-send-wrap">
               <textarea
                 rows={1}
@@ -635,87 +624,7 @@ export default function SpacePage() {
         <div
           className="nlm-resizer"
           id="resizer-1"
-          onMouseDown={(event) => startResize(event, workspaceRef.current, teamRef.current, aiRef.current, 200)}
-        />
-
-        <section className="nlm-pane nlm-pane-ai" ref={aiRef} id="col-aichat">
-          <div className="nlm-pane-head">
-            <h2>
-              <Icon>
-                <rect x="3" y="8" width="18" height="12" rx="2" />
-                <path d="M12 8V4M8 4h8" />
-                <circle cx="9" cy="14" r="1" fill="currentColor" />
-                <circle cx="15" cy="14" r="1" fill="currentColor" />
-              </Icon>
-              AI 채팅
-            </h2>
-          </div>
-          <div className="nlm-scroll" ref={aiScrollRef}>
-            {aiMessages.map((msg) => (
-              <div key={msg.id} className={`nlm-msg${msg.mine ? ' mine' : ''}`}>
-                <div className="nlm-msg-name" style={{ color: msg.color || undefined }}>
-                  {msg.name}
-                </div>
-                <div className="nlm-bubble">
-                  {msg.pending ? (
-                    <div className="nlm-typing">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  ) : (
-                    msg.text
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-          <form className="nlm-composer" onSubmit={onUpload}>
-            <label className="nlm-title-field">
-              <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="제목 (비우면 본문 앞부분을 씁니다)" />
-            </label>
-            <div className="nlm-send-wrap">
-              <textarea
-                rows={3}
-                value={content}
-                placeholder="AI 분석 요청..."
-                onChange={(event) => setContent(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
-                    event.preventDefault()
-                    event.currentTarget.form?.requestSubmit()
-                  }
-                }}
-              />
-              <button className="nlm-send" disabled={busy} type="submit" aria-label="업로드">
-                <Icon>
-                  <polygon points="5 3 19 12 5 21 5 3" fill="currentColor" stroke="none" />
-                </Icon>
-              </button>
-            </div>
-            {error ? <p className="nlm-error">{error}</p> : null}
-          </form>
-          <div className="nlm-recent">
-            <h3>최근 업로드</h3>
-            <ul>
-              {artifacts.map((item) => (
-                <li key={item.id}>
-                  <button type="button" onClick={() => openArtifact(item.id)}>
-                    {item.title}
-                  </button>
-                  <span>
-                    {item.nickname} · {item.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <div
-          className="nlm-resizer"
-          id="resizer-2"
-          onMouseDown={(event) => startResize(event, workspaceRef.current, aiRef.current, mapRef.current, 300)}
+          onMouseDown={(event) => startResize(event, workspaceRef.current, teamRef.current, mapRef.current, 300)}
         />
 
         <section className="nlm-pane nlm-pane-map" ref={mapRef} id="col-mindmap">
@@ -742,70 +651,60 @@ export default function SpacePage() {
             </div>
           </div>
           <div className="nlm-map-body">
-            {nicknames.length ? (
+            {members.length ? (
               <div className="nlm-legend">
-                {nicknames.map((name) => (
-                  <span key={name}>
-                    <i style={{ background: colorForMajor(name) }} />
-                    {name}
+                {members.map((member) => (
+                  <span key={member.key}>
+                    <i style={{ background: memberColors.get(member.key) }} />
+                    {member.nickname}
                   </span>
                 ))}
               </div>
             ) : null}
             {graph?.root ? (
               mapFailed ? (
-                <ErrorBoundary fallback={<GroupCards root={graph.root} onOpenArtifact={openArtifact} onOpenSources={openSources} />}>
-                  <div style={{ padding: 16, overflow: 'auto', height: '100%' }}>
-                    <MindmapTree
-                      node={graph.root}
-                      expanded={expanded}
-                      onToggle={toggle}
-                      onOpenArtifact={openArtifact}
-                      onOpenSources={openSources}
-                    />
-                  </div>
-                </ErrorBoundary>
+                <ErrorBoundary fallback={treeFallback}>{treeFallback}</ErrorBoundary>
               ) : (
-                <ErrorBoundary
-                  key={spaceId}
-                  fallback={
-                    <div style={{ padding: 16, overflow: 'auto', height: '100%' }}>
-                      <MindmapTree
-                        node={graph.root}
-                        expanded={expanded}
-                        onToggle={toggle}
-                        onOpenArtifact={openArtifact}
-                        onOpenSources={openSources}
-                      />
-                    </div>
-                  }
-                >
+                <ErrorBoundary key={spaceId} fallback={treeFallback}>
                   <MindmapCanvas
                     ref={canvasRef}
                     root={graph.root}
                     expanded={expanded}
+                    selectedId={panel?.id}
+                    colorForNode={colorForNode}
                     onToggle={toggle}
                     onOpenArtifact={openArtifact}
-                    onOpenSources={openSources}
                     onError={() => setMapFailed(true)}
                   />
                 </ErrorBoundary>
               )
             ) : (
-              <p className="nlm-empty">마인드맵이 곧 여기에 표시됩니다</p>
+              <p className="nlm-empty">파일을 업로드하면 여기에 비교 트리가 표시됩니다</p>
             )}
             {panel ? (
-              <SourcePanel
-                title={panel.title}
-                items={panel.items}
+              <DetailPanel
+                artifact={panel}
+                busy={busy}
                 onClose={() => setPanel(null)}
-                onOpen={openArtifact}
+                onCompare={() => {
+                  setUploadError('')
+                  setCompareOpen(true)
+                }}
                 containerRef={mapRef}
               />
             ) : null}
           </div>
         </section>
       </main>
+      {compareOpen && panel ? (
+        <CompareUploadModal
+          parentTitle={panel.title}
+          busy={busy}
+          error={uploadError}
+          onClose={() => setCompareOpen(false)}
+          onSubmit={({ name, content }) => createFromFile({ content, name, parentId: panel.id })}
+        />
+      ) : null}
     </div>
   )
 }

@@ -60,23 +60,12 @@ function StatusMark({ status }) {
   return null
 }
 
-export default function MindmapTree({ node, expanded, onToggle, onOpenArtifact, onOpenSources, depth = 0 }) {
+export default function MindmapTree({ node, expanded, onToggle, onOpenArtifact, colorForNode, depth = 0 }) {
   if (!node) return null
   const isOpen = expanded.has(node.id) || node.type === 'SPACE'
-  const hasChildren = (node.children && node.children.length > 0) || node.type === 'COMMON' || node.type === 'DIFF' || node.type === 'NOTES'
+  const hasChildren = Boolean(node.children && node.children.length)
   const indent = { paddingLeft: depth * 16 }
-
-  if (node.type === 'ARTIFACT') {
-    return (
-      <div className="tree-node" style={indent}>
-        <button type="button" className="tree-label" onClick={() => onOpenArtifact(node.artifactId)}>
-          <span className="dot" style={{ background: colorForMajor(node.nickname) }} />
-          {node.label}
-          <StatusMark status={node.status} />
-        </button>
-      </div>
-    )
-  }
+  const color = colorForNode?.(node) || colorForMajor(node.nickname)
 
   return (
     <div className="tree-node" style={indent}>
@@ -88,25 +77,21 @@ export default function MindmapTree({ node, expanded, onToggle, onOpenArtifact, 
         ) : (
           <span className="caret-spacer" />
         )}
-        <button type="button" className="tree-label" onClick={() => onToggle(node.id)}>
+        <button
+          type="button"
+          className="tree-label"
+          onClick={() => {
+            if (node.type === 'ARTIFACT' && node.artifactId) onOpenArtifact(node.artifactId)
+            else if (hasChildren) onToggle(node.id)
+          }}
+        >
+          <span className="dot" style={{ background: color }} />
           {node.label}
-          {node.updated ? <span className="chip">업데이트됨</span> : null}
+          <StatusMark status={node.status} />
         </button>
-        {node.sourceArtifactIds?.length ? (
-          <button type="button" className="linkish" onClick={() => onOpenSources(node.sourceArtifactIds)}>
-            소스 {node.sourceArtifactIds.length}개 보기
-          </button>
-        ) : null}
       </div>
       {isOpen ? (
         <div>
-          {node.body ? <p className="tree-body">{node.body}</p> : null}
-          {node.items?.map((item) => (
-            <p key={`${item.artifactId}-${item.summary}`} className="tree-body">
-              <span className="dot" style={{ background: colorForMajor(item.nickname) }} />
-              {item.summary}
-            </p>
-          ))}
           {(node.children || []).map((child) => (
             <MindmapTree
               key={child.id}
@@ -114,7 +99,7 @@ export default function MindmapTree({ node, expanded, onToggle, onOpenArtifact, 
               expanded={expanded}
               onToggle={onToggle}
               onOpenArtifact={onOpenArtifact}
-              onOpenSources={onOpenSources}
+              colorForNode={colorForNode}
               depth={depth + 1}
             />
           ))}
