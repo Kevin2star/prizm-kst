@@ -94,7 +94,7 @@ function CopyIcon() {
   );
 }
 
-function App() {
+function MainPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -105,7 +105,6 @@ function App() {
   const [editingSpace, setEditingSpace] = useState(null);
   const [editingName, setEditingName] = useState("");
 
-  const [draftInviteCode, setDraftInviteCode] = useState("");
   const [copiedType, setCopiedType] = useState("");
 
   const [joinCode, setJoinCode] = useState("");
@@ -114,50 +113,13 @@ function App() {
 
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
+  const [draftInviteCode, setDraftInviteCode] = useState("");
 
   const [spaces, setSpaces] = useState([]);
 
-  const [invitations, setInvitations] = useState([
-    {
-      id: 101,
-      name: "디자인 레퍼런스",
-      description: "다양한 레퍼런스를 모아봐요.",
-      inviter: "김지수",
-      inviteCode: "REF-9T4M",
-      members: [
-        { initial: "J", name: "김지수" },
-        { initial: "R", name: "리즘" },
-      ],
-    },
-  ]);
+  const [invitations, setInvitations] = useState([]);
 
-  const joinableSpaces = [
-    {
-      id: 201,
-      name: "디자인 시스템 구축",
-      description: "팀 디자인 시스템과 UI 가이드를 정리하는 공간",
-      inviteCode: "DESIGN-24A7",
-      members: [
-        { initial: "H", name: "하린" },
-        { initial: "D", name: "도윤" },
-        { initial: "R", name: "리즘" },
-      ],
-      updated: "방금 전",
-      favorite: false,
-    },
-    {
-      id: 202,
-      name: "AI 아이디어 랩",
-      description: "AI 서비스 아이디어를 함께 발전시키는 공간",
-      inviteCode: "AI-7LAB",
-      members: [
-        { initial: "J", name: "지훈" },
-        { initial: "R", name: "리즘" },
-      ],
-      updated: "방금 전",
-      favorite: false,
-    },
-  ];
+  const joinableSpaces = [];
 
   const notifications = [
     {
@@ -236,7 +198,6 @@ function App() {
     setSpaceName("");
     setSpaceDescription("");
     setDraftInviteCode("");
-    setCopiedType("");
     setShowModal(false);
   };
 
@@ -381,8 +342,8 @@ function App() {
     setOpenSpaceMenu(null);
   };
 
-  const getInviteLink = (inviteCode) => {
-    return `${window.location.origin}/join/${inviteCode}`;
+  const getInviteLink = (code) => {
+    return `${window.location.origin}/join/${code}`;
   };
 
   const copyText = async (text, type) => {
@@ -647,7 +608,6 @@ function App() {
               onClick={(e) => {
                 e.stopPropagation();
                 setDraftInviteCode(makeInviteCode());
-                setCopiedType("");
                 setShowModal(true);
                 setShowProfile(false);
                 setShowNotifications(false);
@@ -812,13 +772,12 @@ function App() {
               placeholder="프로젝트를 간단하게 설명해주세요."
             />
 
-            <label>스페이스 초대</label>
             <div className="share-list">
               <div className="share-row">
                 <div className="share-info">
                   <span className="share-label">초대 링크</span>
                   <span className="share-value">
-                    {getInviteLink(draftInviteCode)}
+                    {draftInviteCode ? getInviteLink(draftInviteCode) : ""}
                   </span>
                 </div>
 
@@ -828,6 +787,7 @@ function App() {
                   onClick={() =>
                     copyText(getInviteLink(draftInviteCode), "link")
                   }
+                  disabled={!draftInviteCode}
                 >
                   <CopyIcon />
                   {copiedType === "link" ? "복사됨" : "복사"}
@@ -845,7 +805,10 @@ function App() {
                 <button
                   type="button"
                   className="share-copy-button"
-                  onClick={() => copyText(draftInviteCode, "code")}
+                  onClick={() =>
+                    copyText(draftInviteCode, "code")
+                  }
+                  disabled={!draftInviteCode}
                 >
                   <CopyIcon />
                   {copiedType === "code" ? "복사됨" : "복사"}
