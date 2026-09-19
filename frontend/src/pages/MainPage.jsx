@@ -115,42 +115,7 @@ function App() {
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
 
-  const [spaces, setSpaces] = useState([
-    {
-      id: 1,
-      name: "PRIZM 해커톤",
-      description: "AI 기반 팀 협업 프로젝트",
-      inviteCode: "PRIZM-8K2F",
-      members: [
-        { initial: "R", name: "리즘" },
-        { initial: "S", name: "수민" },
-        { initial: "J", name: "지수" },
-      ],
-      updated: "2시간 전",
-      favorite: true,
-    },
-    {
-      id: 2,
-      name: "서비스 기획",
-      description: "팀 아이디어를 정리하는 공간",
-      inviteCode: "PLAN-5M9Q",
-      members: [
-        { initial: "R", name: "리즘" },
-        { initial: "M", name: "민지" },
-      ],
-      updated: "어제",
-      favorite: false,
-    },
-    {
-      id: 3,
-      name: "개인 작업실",
-      description: "나만의 생각과 기록",
-      inviteCode: "RISM-3P7X",
-      members: [{ initial: "R", name: "리즘" }],
-      updated: "3일 전",
-      favorite: false,
-    },
-  ]);
+  const [spaces, setSpaces] = useState([]);
 
   const [invitations, setInvitations] = useState([
     {
