@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { supabase } from "../supabaseClient";
-import "./MainPage.css";
+import { useState } from "react";
+import "./App.css";
 
 function BellIcon() {
   return (
@@ -96,14 +94,7 @@ function CopyIcon() {
   );
 }
 
-function MainPage() {
-  const navigate = useNavigate();
-  const [nickname, setNickname] = useState(
-    sessionStorage.getItem("prizm_test_nickname") || ""
-  );
-  const [email, setEmail] = useState(
-    sessionStorage.getItem("prizm_test_email") || ""
-  );
+function App() {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -114,8 +105,8 @@ function MainPage() {
   const [editingSpace, setEditingSpace] = useState(null);
   const [editingName, setEditingName] = useState("");
 
-  const [copiedType, setCopiedType] = useState("");
   const [draftInviteCode, setDraftInviteCode] = useState("");
+  const [copiedType, setCopiedType] = useState("");
 
   const [joinCode, setJoinCode] = useState("");
   const [joinMessage, setJoinMessage] = useState("");
@@ -123,45 +114,6 @@ function MainPage() {
 
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
-
-  useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-        error,
-      } = await supabase.auth.getUser();
-
-      if (error) {
-        console.error("사용자 정보 불러오기 실패:", error);
-        return;
-      }
-
-      if (user) {
-        const supabaseNickname = user.user_metadata?.nickname;
-
-        if (supabaseNickname) {
-          setNickname(supabaseNickname);
-          sessionStorage.setItem("prizm_test_nickname", supabaseNickname);
-        }
-
-        if (user.email) {
-          setEmail(user.email);
-          sessionStorage.setItem("prizm_test_email", user.email);
-        }
-      }
-    };
-
-    getUser();
-  }, []);
-
-  const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      console.error("로그아웃 실패:", error);
-      return;
-    }
-    navigate("/");
-  };
 
   const [spaces, setSpaces] = useState([
     {
@@ -309,7 +261,7 @@ function MainPage() {
       name: spaceName.trim(),
       description: spaceDescription.trim() || "새로운 프로젝트 공간",
       inviteCode: draftInviteCode || makeInviteCode(),
-      members: [{ initial: nickname.charAt(0).toUpperCase(), name: nickname }],
+      members: [{ initial: "R", name: "리즘" }],
       updated: "방금 전",
       favorite: false,
     };
@@ -565,10 +517,8 @@ function MainPage() {
                 setOpenSpaceMenu(null);
               }}
             >
-              <div className="profile-circle">
-                {nickname.charAt(0).toUpperCase()}
-              </div>
-              <span className="profile-name">{nickname}</span>
+              <div className="profile-circle">R</div>
+              <span className="profile-name">리즘</span>
               <span className="profile-arrow">▾</span>
             </button>
 
@@ -576,12 +526,12 @@ function MainPage() {
               <div className="profile-menu">
                 <div className="profile-menu-user">
                   <div className="profile-circle large">
-                    {nickname.charAt(0).toUpperCase()}
+                    R
                   </div>
 
                   <div className="profile-menu-text">
-                    <strong>{nickname}</strong>
-                    <p>{email}</p>
+                    <strong>리즘</strong>
+                    <p>rism@prizm.com</p>
                   </div>
                 </div>
 
@@ -593,7 +543,7 @@ function MainPage() {
 
                 <div className="divider" />
 
-                <button className="menu-item logout" onClick={handleLogout}>
+                <button className="menu-item logout">
                   로그아웃
                 </button>
               </div>
@@ -605,7 +555,7 @@ function MainPage() {
       <main className="main">
         <section className="welcome">
           <h1>
-            안녕하세요, {nickname}님! <span>👋</span>
+            안녕하세요, 리즘님! <span>👋</span>
           </h1>
           <p>
             오늘도 좋은 아이디어가 멋진 프로젝트로 이어지길 바라요.
@@ -633,7 +583,7 @@ function MainPage() {
           </div>
 
           {/* 스페이스 카드 */}
-          <div className="main-space-grid">
+          <div className="space-grid">
             {sortedSpaces.map((space) => (
               <div
                 className="space-card"
@@ -897,9 +847,8 @@ function MainPage() {
               placeholder="프로젝트를 간단하게 설명해주세요."
             />
 
-            <label>팀원 초대</label>
-
-            <div className="share-list create-share-list">
+            <label>스페이스 초대</label>
+            <div className="share-list">
               <div className="share-row">
                 <div className="share-info">
                   <span className="share-label">초대 링크</span>
@@ -912,11 +861,11 @@ function MainPage() {
                   type="button"
                   className="share-copy-button"
                   onClick={() =>
-                    copyText(getInviteLink(draftInviteCode), "create-link")
+                    copyText(getInviteLink(draftInviteCode), "link")
                   }
                 >
                   <CopyIcon />
-                  {copiedType === "create-link" ? "복사됨" : "복사"}
+                  {copiedType === "link" ? "복사됨" : "복사"}
                 </button>
               </div>
 
@@ -931,12 +880,10 @@ function MainPage() {
                 <button
                   type="button"
                   className="share-copy-button"
-                  onClick={() =>
-                    copyText(draftInviteCode, "create-code")
-                  }
+                  onClick={() => copyText(draftInviteCode, "code")}
                 >
                   <CopyIcon />
-                  {copiedType === "create-code" ? "복사됨" : "복사"}
+                  {copiedType === "code" ? "복사됨" : "복사"}
                 </button>
               </div>
             </div>
@@ -1022,4 +969,4 @@ function MainPage() {
   );
 }
 
-export default MainPage;
+export default App;
