@@ -447,7 +447,7 @@ function MainPage() {
       }
 
       await refreshSpaces(user);
-      setOpenSpaceMenu(null);
+    setOpenSpaceMenu(null);
     } catch (err) {
       alert(err.message || "스페이스를 삭제하지 못했습니다.");
       try {
@@ -465,10 +465,6 @@ function MainPage() {
     setInviteSpace(space);
     setOpenSpaceMenu(null);
     setCopiedType("");
-  };
-
-  const getInviteLink = (space) => {
-    return `${window.location.origin}/join/${space.inviteCode}`;
   };
 
   const copyText = async (text, type) => {
@@ -644,9 +640,7 @@ function MainPage() {
 
                           <button
                             className="space-menu-item"
-                            onClick={() =>
-                              openInviteModal(space)
-                            }
+                            onClick={() => openInviteModal(space)}
                           >
                             <LinkIcon />
                             <span>초대하기</span>
@@ -655,13 +649,13 @@ function MainPage() {
                           <div className="space-menu-divider" />
 
                           {space.ownerId === currentUserId && (
-                            <button
-                              className="space-menu-item delete"
-                              onClick={() => deleteSpace(space)}
-                            >
-                              <TrashIcon />
-                              <span>스페이스 삭제</span>
-                            </button>
+                          <button
+                            className="space-menu-item delete"
+                            onClick={() => deleteSpace(space)}
+                          >
+                            <TrashIcon />
+                            <span>스페이스 삭제</span>
+                          </button>
                           )}
                         </div>
                       )}
@@ -840,41 +834,41 @@ function MainPage() {
               </>
             ) : (
               <>
-                <label>스페이스 이름</label>
-                <input
-                  value={spaceName}
-                  onChange={(e) =>
-                    setSpaceName(e.target.value)
-                  }
-                  placeholder="예: PRIZM 해커톤"
-                  autoFocus
-                />
+            <label>스페이스 이름</label>
+            <input
+              value={spaceName}
+              onChange={(e) =>
+                setSpaceName(e.target.value)
+              }
+              placeholder="예: PRIZM 해커톤"
+              autoFocus
+            />
 
-                <label>프로젝트 설명</label>
-                <textarea
-                  value={spaceDescription}
-                  onChange={(e) =>
-                    setSpaceDescription(e.target.value)
-                  }
-                  placeholder="프로젝트를 간단하게 설명해주세요."
-                />
+            <label>프로젝트 설명</label>
+            <textarea
+              value={spaceDescription}
+              onChange={(e) =>
+                setSpaceDescription(e.target.value)
+              }
+              placeholder="프로젝트를 간단하게 설명해주세요."
+            />
 
-                <div className="modal-buttons">
-                  <button
-                    className="cancel-button"
-                    onClick={() => setShowModal(false)}
-                  >
-                    취소
-                  </button>
+            <div className="modal-buttons">
+              <button
+                className="cancel-button"
+                onClick={() => setShowModal(false)}
+              >
+                취소
+              </button>
 
-                  <button
-                    className="create-button"
-                    disabled={creatingSpace}
-                    onClick={createSpace}
-                  >
-                    만들기
-                  </button>
-                </div>
+              <button
+                className="create-button"
+                disabled={creatingSpace}
+                onClick={createSpace}
+              >
+                만들기
+              </button>
+            </div>
               </>
             )}
           </div>
@@ -964,33 +958,6 @@ function MainPage() {
             </div>
 
             <div className="share-list">
-              <div className="share-row">
-                <div className="share-info">
-                  <span className="share-label">
-                    초대 링크
-                  </span>
-
-                  <span className="share-value">
-                    {getInviteLink(inviteSpace)}
-                  </span>
-                </div>
-
-                <button
-                  className="share-copy-button"
-                  onClick={() =>
-                    copyText(
-                      getInviteLink(inviteSpace),
-                      "link"
-                    )
-                  }
-                >
-                  <CopyIcon />
-                  {copiedType === "link"
-                    ? "복사됨"
-                    : "복사"}
-                </button>
-              </div>
-
               <div className="share-row">
                 <div className="share-info">
                   <span className="share-label">
