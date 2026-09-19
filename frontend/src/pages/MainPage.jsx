@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { loadMemberProfile, signOutMember } from "../auth";
+import { supabase } from "../supabaseClient";
 import "./MainPage.css";
 
 function BellIcon() {
@@ -98,6 +98,8 @@ function CopyIcon() {
 
 function MainPage() {
   const navigate = useNavigate();
+  const [nickname, setNickname] = useState("사용자");
+  const [email, setEmail] = useState("");
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -111,7 +113,6 @@ function MainPage() {
   const [inviteSpace, setInviteSpace] = useState(null);
   const [copiedType, setCopiedType] = useState("");
 
-  const [member, setMember] = useState(null);
   const [joinCode, setJoinCode] = useState("");
   const [joinMessage, setJoinMessage] = useState("");
   const [joinStatus, setJoinStatus] = useState("");
@@ -121,19 +122,28 @@ function MainPage() {
   const [inviteEmail, setInviteEmail] = useState("");
 
   useEffect(() => {
-    loadMemberProfile()
-      .then((profile) => setMember(profile))
-      .catch(() => setMember(null));
+    const getUser = async () => {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error) {
+        console.error("사용자 정보 불러오기 실패:", error);
+        return;
+      }
+      if (user) {
+        setNickname(user.user_metadata?.nickname || "사용자");
+        setEmail(user.email || "");
+      }
+    };
+    getUser();
   }, []);
 
   const handleLogout = async () => {
-    await signOutMember();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("로그아웃 실패:", error);
+      return;
+    }
     navigate("/");
   };
-
-  const displayName = member?.nickname || "사용자";
-  const displayEmail = member?.email || "";
-  const displayInitial = displayName.charAt(0);
 
   const [spaces, setSpaces] = useState([
     {
@@ -281,7 +291,7 @@ function MainPage() {
       name: spaceName.trim(),
       description: spaceDescription.trim() || "새로운 프로젝트 공간",
       inviteCode: makeInviteCode(),
-      members: [{ initial: "R", name: "리즘" }],
+      members: [{ initial: nickname.charAt(0).toUpperCase(), name: nickname }],
       updated: "방금 전",
       favorite: false,
     };
@@ -542,8 +552,10 @@ function MainPage() {
                 setOpenSpaceMenu(null);
               }}
             >
-              <div className="profile-circle">{displayInitial}</div>
-              <span className="profile-name">{displayName}</span>
+              <div className="profile-circle">
+                {nickname.charAt(0).toUpperCase()}
+              </div>
+              <span className="profile-name">{nickname}</span>
               <span className="profile-arrow">▾</span>
             </button>
 
@@ -551,12 +563,12 @@ function MainPage() {
               <div className="profile-menu">
                 <div className="profile-menu-user">
                   <div className="profile-circle large">
-                    {displayInitial}
+                    {nickname.charAt(0).toUpperCase()}
                   </div>
 
                   <div className="profile-menu-text">
-                    <strong>{displayName}</strong>
-                    <p>{displayEmail}</p>
+                    <strong>{nickname}</strong>
+                    <p>{email}</p>
                   </div>
                 </div>
 
@@ -580,7 +592,7 @@ function MainPage() {
       <main className="main">
         <section className="welcome">
           <h1>
-            안녕하세요, {displayName}님! <span>👋</span>
+            안녕하세요, {nickname}님! <span>👋</span>
           </h1>
           <p>
             오늘도 좋은 아이디어가 멋진 프로젝트로 이어지길 바라요.
