@@ -1,10 +1,52 @@
 const PALETTE = ['#7c3aed', '#2563eb', '#059669', '#d97706', '#db2777', '#0f766e', '#ea580c']
 
+const MEMBER_PALETTE = [
+  '#7c3aed',
+  '#2563eb',
+  '#059669',
+  '#d97706',
+  '#db2777',
+  '#0f766e',
+  '#ea580c',
+  '#4f46e5',
+  '#0891b2',
+  '#ca8a04',
+  '#be123c',
+  '#15803d',
+  '#9333ea',
+  '#c2410c',
+  '#0369a1',
+  '#a21caf',
+]
+
 export function colorForMajor(major) {
   if (!major) return '#9ca3af'
   let hash = 0
   for (let i = 0; i < major.length; i += 1) hash = (hash * 31 + major.charCodeAt(i)) >>> 0
   return PALETTE[hash % PALETTE.length]
+}
+
+export function identityKey(nickname, school, major, memberId) {
+  const nick = String(nickname || '').trim().toLowerCase()
+  const sch = String(school || '').trim().toLowerCase()
+  const maj = String(major || '').trim().toLowerCase()
+  if (nick && sch && maj) return `${nick}|${sch}|${maj}`
+  if (memberId != null && String(memberId).trim() !== '') return `id:${memberId}`
+  return nick ? `nick:${nick}` : `id:${memberId || 'unknown'}`
+}
+
+export function memberColorMap(members) {
+  const list = [...(members || [])].sort((a, b) => String(a.key).localeCompare(String(b.key), 'ko'))
+  const n = list.length
+  const map = new Map()
+  list.forEach((member, index) => {
+    const color =
+      n <= MEMBER_PALETTE.length
+        ? MEMBER_PALETTE[index]
+        : `hsl(${Math.round((360 * index) / n)} 58% 42%)`
+    map.set(member.key, color)
+  })
+  return map
 }
 
 export function collectMajors(node, set = new Set()) {

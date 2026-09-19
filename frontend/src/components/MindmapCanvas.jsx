@@ -4,10 +4,25 @@ import { colorForMajor } from './MindmapTree'
 
 const DEFAULT_COLOR = '#555555'
 
-function clip(text, max = 28) {
+function wrapLines(text, maxChars = 16, maxLines = 2) {
   const value = String(text || '').replace(/\s+/g, ' ').trim()
-  if (value.length <= max) return value
-  return `${value.slice(0, max)}…`
+  if (!value) return ['']
+  const lines = []
+  let rest = value
+  while (rest && lines.length < maxLines) {
+    if (rest.length <= maxChars) {
+      lines.push(rest)
+      rest = ''
+      break
+    }
+    lines.push(rest.slice(0, maxChars))
+    rest = rest.slice(maxChars)
+  }
+  if (rest && lines.length) {
+    const last = lines[lines.length - 1]
+    lines[lines.length - 1] = `${last.slice(0, Math.max(1, maxChars - 1))}…`
+  }
+  return lines
 }
 
 function statusSuffix(node) {
@@ -39,7 +54,7 @@ function graphToChart(node, expanded) {
   if (open && node.body) {
     kids.push({
       id: `${node.id}::body`,
-      name: clip(node.body, 32),
+      name: String(node.body || '').replace(/\s+/g, ' ').trim(),
       type: 'BODY',
       color: DEFAULT_COLOR,
       sourceArtifactIds: node.sourceArtifactIds,
@@ -51,7 +66,7 @@ function graphToChart(node, expanded) {
     ;(node.items || []).forEach((item, index) => {
       kids.push({
         id: `${node.id}::item-${item.artifactId ?? index}`,
-        name: clip(item.summary, 32),
+        name: String(item.summary || '').replace(/\s+/g, ' ').trim(),
         type: 'ITEM',
         color: colorForMajor(item.major),
         artifactId: item.artifactId,
@@ -117,7 +132,7 @@ function handleNodeClick(d, handlers) {
 
 function drawTree(g, data, handlers) {
   const root = d3.hierarchy(data)
-  d3.tree().nodeSize([56, 220])(root)
+  d3.tree().nodeSize([96, 320])(root)
   const nodes = root.descendants()
   const links = root.links()
 
@@ -141,25 +156,40 @@ function drawTree(g, data, handlers) {
       handleNodeClick(d, handlers)
     })
 
-  nodeEnter.append('rect').attr('rx', 6).attr('ry', 6).attr('y', -16).attr('height', 32)
-  nodeEnter.append('text').attr('dy', '0.35em')
+  nodeEnter.append('rect').attr('rx', 6).attr('ry', 6)
+  nodeEnter.append('text')
 
   const nodeUpdate = nodeEnter.merge(nodeSelection)
   nodeUpdate.attr('transform', (d) => `translate(${d.y},${d.x})`)
-  nodeUpdate.select('text').text((d) => d.data.name)
 
-  nodeUpdate.select('rect').each(function applyWidth(d) {
-    const textNode = this.parentNode.querySelector('text')
-    const textWidth = textNode.getComputedTextLength()
-    const rectWidth = Math.max(textWidth + 24, 36)
-    const isParent = Boolean(d.children || d.data.expandable)
-    d3.select(this)
+  nodeUpdate.each(function applyLabel(d) {
+    const lines = wrapLines(d.data.name)
+    const lineHeight = 18
+    const rectHeight = Math.max(36, 14 + lines.length * lineHeight)
+    const group = d3.select(this)
+    const text = group.select('text')
+    text.selectAll('tspan').remove()
+    text.attr('text-anchor', 'start').attr('x', 12).attr('y', 0)
+    const startDy = -((lines.length - 1) * lineHeight) / 2
+    lines.forEach((line, index) => {
+      text
+        .append('tspan')
+        .attr('x', 12)
+        .attr('dy', index === 0 ? startDy + 4 : lineHeight)
+        .text(line)
+    })
+    let textWidth = 40
+    text.selectAll('tspan').each(function measure() {
+      textWidth = Math.max(textWidth, this.getComputedTextLength())
+    })
+    const rectWidth = Math.max(textWidth + 24, 40)
+    group
+      .select('rect')
       .attr('width', rectWidth)
-      .attr('x', isParent ? -rectWidth : 0)
+      .attr('height', rectHeight)
+      .attr('x', 0)
+      .attr('y', -rectHeight / 2)
       .style('stroke', d.data.color || DEFAULT_COLOR)
-    d3.select(textNode)
-      .attr('x', isParent ? -12 : 12)
-      .attr('text-anchor', isParent ? 'end' : 'start')
   })
 
   nodeSelection.exit().remove()

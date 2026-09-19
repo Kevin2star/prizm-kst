@@ -466,16 +466,35 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(360px, 100%);
+  width: min(420px, 42%);
+  max-width: 100%;
   z-index: 25;
   background: var(--nlm-panel);
   border-left: 1px solid var(--nlm-border);
   padding: 16px;
+  overflow-x: visible;
   overflow-y: auto;
   color: var(--nlm-text);
+  box-sizing: border-box;
 }
 
-.nlm-workspace .panel h2 { color: var(--nlm-text); }
+.nlm-workspace .panel h2 {
+  color: var(--nlm-text);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.nlm-workspace .panel article,
+.nlm-workspace .panel .panel-article,
+.nlm-workspace .panel .panel-list,
+.nlm-workspace .panel .body-text,
+.nlm-workspace .panel p {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .nlm-workspace .panel .btn {
   background: var(--nlm-input);
   border-color: var(--nlm-border);
@@ -485,6 +504,11 @@
 .nlm-workspace .panel-list p,
 .nlm-workspace .body-text,
 .nlm-workspace .tags { color: var(--nlm-muted); }
+.nlm-workspace .body-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 .nlm-workspace .tags { color: var(--nlm-primary); }
 
 .nlm-workspace .cards { padding: 16px; overflow: auto; height: 100%; }

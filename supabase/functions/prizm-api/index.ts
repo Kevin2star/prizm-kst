@@ -48,6 +48,22 @@ function scheduleAnalyze(artifactId: number) {
   else run();
 }
 
+function normIdentity(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function memberJson(spaceId: number, member: Record<string, unknown>) {
+  const memberId = num(member.id);
+  return {
+    id: memberId,
+    memberId,
+    spaceId,
+    nickname: member.nickname,
+    school: member.school,
+    major: member.major,
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -79,6 +95,31 @@ Deno.serve(async (req) => {
       const nickname = requireText(body.nickname, "NICKNAME_REQUIRED", "닉네임을 입력하세요.");
       const school = requireText(body.school, "SCHOOL_REQUIRED", "학교를 입력하세요.");
       const major = requireText(body.major, "MAJOR_REQUIRED", "전공을 입력하세요.");
+      const spaceId = num(space.id);
+      const requestedId = Number(body.memberId);
+      if (Number.isFinite(requestedId) && requestedId > 0) {
+        const { data: byId } = await admin
+          .from("members")
+          .select("*")
+          .eq("id", requestedId)
+          .eq("space_id", space.id)
+          .maybeSingle();
+        if (byId) return json(memberJson(spaceId, byId as Record<string, unknown>));
+      }
+      const { data: existingRows, error: existingError } = await admin
+        .from("members")
+        .select("*")
+        .eq("space_id", space.id);
+      if (existingError) throw existingError;
+      const nickKey = normIdentity(nickname);
+      const schoolKey = normIdentity(school);
+      const majorKey = normIdentity(major);
+      const matched = (existingRows ?? []).find((row) =>
+        normIdentity(row.nickname) === nickKey &&
+        normIdentity(row.school) === schoolKey &&
+        normIdentity(row.major) === majorKey
+      );
+      if (matched) return json(memberJson(spaceId, matched as Record<string, unknown>));
       const { data: member, error } = await admin.from("members").insert({
         space_id: space.id,
         nickname,
@@ -86,15 +127,7 @@ Deno.serve(async (req) => {
         major,
       }).select("*").single();
       if (error) throw error;
-      const memberId = num(member.id);
-      return json({
-        id: memberId,
-        memberId,
-        spaceId: num(space.id),
-        nickname: member.nickname,
-        school: member.school,
-        major: member.major,
-      });
+      return json(memberJson(spaceId, member as Record<string, unknown>));
     }
 
     const graphMatch = path.match(/^\/spaces\/(\d+)\/graph$/);

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api'
-import { saveSession } from '../session'
+import { loadSession, saveSession } from '../session'
 
 export default function JoinSpace() {
   const navigate = useNavigate()
@@ -18,10 +18,12 @@ export default function JoinSpace() {
     setError('')
     setBusy(true)
     try {
+      const session = loadSession()
       const member = await api.joinSpace(form.code, {
         nickname: form.nickname,
         school: form.school,
         major: form.major,
+        memberId: session.memberId ? Number(session.memberId) : undefined,
       })
       saveSession({
         memberId: member.memberId,

@@ -4,7 +4,7 @@ import { api } from '../api'
 import ErrorBoundary from '../components/ErrorBoundary'
 import GroupCards from '../components/GroupCards'
 import MindmapCanvas from '../components/MindmapCanvas'
-import MindmapTree, { collectMajors, colorForMajor } from '../components/MindmapTree'
+import MindmapTree, { collectMajors, colorForMajor, identityKey, memberColorMap } from '../components/MindmapTree'
 import SourcePanel from '../components/SourcePanel'
 import { connectSpaceRealtime } from '../realtime'
 import { loadSession, sessionMatchesSpace } from '../session'
@@ -127,6 +127,30 @@ export default function SpacePage() {
     return stop
   }, [spaceId])
 
+  const members = useMemo(() => {
+    const map = new Map()
+    const add = (nickname, school, major, memberId) => {
+      if (!nickname) return
+      const key = identityKey(nickname, school, major, memberId)
+      const id = memberId == null ? null : String(memberId)
+      const existing = map.get(key)
+      if (!existing) {
+        map.set(key, { key, nickname, school, major, memberId: id })
+        return
+      }
+      if (id && id === String(session.memberId)) existing.memberId = id
+    }
+    add(session.nickname, session.school, session.major, session.memberId)
+    artifacts.forEach((item) => add(item.nickname, item.school, item.major, item.memberId))
+    return [...map.values()]
+  }, [artifacts, session.memberId, session.major, session.nickname, session.school])
+
+  const memberColors = useMemo(() => memberColorMap(members), [members])
+
+  function personColor(nickname, school, major, memberId) {
+    return memberColors.get(identityKey(nickname, school, major, memberId)) || '#4b5563'
+  }
+
   useEffect(() => {
     setTeamMessages((current) => {
       const next = [...current]
@@ -137,13 +161,13 @@ export default function SpacePage() {
           id,
           name: item.nickname || '멤버',
           text: `결과물을 올렸습니다: ${item.title}`,
-          color: colorForMajor(item.major),
+          color: personColor(item.nickname, item.school, item.major, item.memberId),
           mine: String(item.memberId) === String(session.memberId),
         })
       })
       return next
     })
-  }, [artifacts, session.memberId])
+  }, [artifacts, session.memberId, memberColors])
 
   useEffect(() => {
     setAiMessages((current) =>
@@ -172,18 +196,6 @@ export default function SpacePage() {
 
   const majors = useMemo(() => [...collectMajors(graph?.root)], [graph])
 
-  const members = useMemo(() => {
-    const map = new Map()
-    const add = (nickname, major, memberId) => {
-      if (!nickname) return
-      const key = String(memberId ?? nickname)
-      if (!map.has(key)) map.set(key, { key, nickname, major, memberId: memberId == null ? null : String(memberId) })
-    }
-    add(session.nickname, session.major, session.memberId)
-    artifacts.forEach((item) => add(item.nickname, item.major, item.memberId))
-    return [...map.values()]
-  }, [artifacts, session.memberId, session.major, session.nickname])
-
   function toggle(id) {
     setExpanded((current) => {
       const next = new Set(current)
@@ -206,7 +218,7 @@ export default function SpacePage() {
         id: `u-${Date.now()}`,
         role: 'user',
         name: session.nickname,
-        color: colorForMajor(session.major),
+        color: personColor(session.nickname, session.school, session.major, session.memberId),
         text: title.trim() ? `${heading}\n${body}` : body,
         mine: true,
       },
@@ -284,7 +296,7 @@ export default function SpacePage() {
         id: `t-${Date.now()}`,
         name: session.nickname,
         text,
-        color: colorForMajor(session.major),
+        color: personColor(session.nickname, session.school, session.major, session.memberId),
         mine: true,
       },
     ])
@@ -331,8 +343,13 @@ export default function SpacePage() {
             {members.map((member) => (
               <div
                 key={member.key}
-                className={`nlm-member${member.memberId === String(session.memberId) ? ' is-me' : ''}`}
-                style={{ background: colorForMajor(member.major) }}
+                className={`nlm-member${
+                  member.memberId === String(session.memberId) ||
+                  member.key === identityKey(session.nickname, session.school, session.major, session.memberId)
+                    ? ' is-me'
+                    : ''
+                }`}
+                style={{ background: memberColors.get(member.key) }}
                 title={`${member.nickname}${member.major ? ` · ${member.major}` : ''}`}
               >
                 {shortName(member.nickname)}

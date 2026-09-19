@@ -22,7 +22,7 @@ export default function SourcePanel({ title, items, onClose, onOpen }) {
           ))}
         </ul>
       ) : (
-        <article>
+        <article className="panel-article">
           <p>
             {items.nickname} · {items.school} · {items.major}
           </p>

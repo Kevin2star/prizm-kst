@@ -14,6 +14,7 @@ KOSSCCHTHON — 단계별 구현 프롬프트 가이드
    이미 01~13이 끝난 뒤 DB만 바꿀 때는 14를 실행한다.
    Spring 백엔드 자체를 제거할 때는 15를 실행한다. 15가 끝나면 14는 쓰지 않는다.
    스페이스 화면을 NotebookLM 클론 HTML 레이아웃으로 바꿀 때는 16을 실행한다.
+   마인드맵 노드 겹침·상세글 잘림·중복 입장 프로필·멤버 색 충돌은 16 뒤에 17을 실행한다.
 2. 각 파일을 Cursor / Claude / ChatGPT 등 코딩 에이전트에 그대로 붙여넣는다.
 3. 한 단계가 완료 기준을 통과한 뒤에만 다음 파일로 넘어간다.
 4. 모든 프롬프트는 P0만 구현한다. P1(파일 업로드), P2(노드 수동 이동, 댓글)는 하지 않는다.
@@ -41,6 +42,10 @@ KOSSCCHTHON — 단계별 구현 프롬프트 가이드
 15_spring_to_supabase_backend.txt  Spring API/STOMP/Gemini → Supabase Edge Functions + Realtime
 16_notebooklm_space_ui.txt     /spaces/:id 를 notebooklm_clone.html 레이아웃으로 리쉘
                                (01~15 기능이 동작하는 뒤에만 실행)
+17_mindmap_overlap_member_identity.txt
+                               마인드맵 카테고리 겹침, 상세글 잘림,
+                               동일 신원 재입장 시 멤버 중복 금지, TEAM 프로필 색 충돌 해소
+                               (16 뒤에만 실행)
 
 ================================================================
 기술 스택 (고정)
