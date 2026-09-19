@@ -4,7 +4,7 @@ import { api } from "../api";
 import {
   applySpaceSession,
   createOwnedSpace,
-  findSpaceMembership,
+  ensureSpaceParticipation,
   listMySpaces,
 } from "../spaceMembership";
 import { supabase } from "../supabaseClient";
@@ -293,28 +293,10 @@ function MainPage() {
               space_id: space.id,
               nickname: space.memberNickname || nickname,
             }
-          : await findSpaceMembership(space.id, user);
+          : null;
 
       if (!membership) {
-        membership = await findSpaceMembership(space.id, user);
-      }
-
-      if (!membership && space.inviteCode) {
-        const { data: spaceRow } = await supabase
-          .from("spaces")
-          .select("id, owner_id, join_code")
-          .eq("id", space.id)
-          .maybeSingle();
-        if (spaceRow?.owner_id === user.id) {
-          const member = await api.joinSpace(spaceRow.join_code || space.inviteCode, {
-            nickname,
-          });
-          membership = {
-            id: member.memberId,
-            space_id: member.spaceId,
-            nickname: member.nickname,
-          };
-        }
+        membership = await ensureSpaceParticipation(user, space.id);
       }
 
       if (!membership) {
@@ -370,7 +352,7 @@ function MainPage() {
         name: spaceName.trim(),
         description: spaceDescription.trim(),
       });
-      await api.joinSpace(space.join_code, { nickname });
+      await ensureSpaceParticipation(user, space.id);
       await refreshSpaces(user);
 
       setSpaceName("");

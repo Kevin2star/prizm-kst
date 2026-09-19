@@ -62,6 +62,20 @@ export function applySpaceSession(membership, joinCode) {
   });
 }
 
+export async function ensureSpaceParticipation(user, spaceId) {
+  const existing = await findSpaceMembership(spaceId, user);
+  if (existing) return existing;
+
+  const { data, error } = await supabase.rpc("ensure_space_member", {
+    p_space_id: spaceId,
+  });
+  if (error) throw error;
+  if (!data?.id) {
+    throw new Error("스페이스 참여 정보를 만들지 못했습니다.");
+  }
+  return data;
+}
+
 function randomJoinCode() {
   const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   const bytes = crypto.getRandomValues(new Uint8Array(6));
