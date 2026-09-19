@@ -1,5 +1,18 @@
-import { useState } from "react";
-import "./App.css";
+import { useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
+import "./MainPage.css";
+
+function formatUpdated(isoString) {
+  if (!isoString) return "";
+  const diffMs = Date.now() - new Date(isoString).getTime();
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 전`;
+  if (hours < 48) return "어제";
+  return new Date(isoString).toLocaleDateString("ko-KR");
+}
 
 function BellIcon() {
   return (
@@ -94,7 +107,7 @@ function CopyIcon() {
   );
 }
 
-function App() {
+function MainPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -117,19 +130,50 @@ function App() {
 
   const [spaces, setSpaces] = useState([]);
 
-  const [invitations, setInvitations] = useState([
-    {
-      id: 101,
-      name: "디자인 레퍼런스",
-      description: "다양한 레퍼런스를 모아봐요.",
-      inviter: "김지수",
-      inviteCode: "REF-9T4M",
-      members: [
-        { initial: "J", name: "김지수" },
-        { initial: "R", name: "리즘" },
-      ],
-    },
-  ]);
+  // 초대받은 스페이스 데이터 소스가 아직 없어서 빈 배열로 시작한다.
+  // invitations.length > 0 조건이 있어서 실제 초대가 없으면 섹션 자체가 뜨지 않는다.
+  const [invitations, setInvitations] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadSpaces() {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (!active) return;
+      if (userError || !userData?.user) return;
+
+      setUserId(userData.user.id);
+
+      const { data, error } = await supabase
+        .from("spaces")
+        .select("id, name, description, join_code, updated_at")
+        .eq("owner_id", userData.user.id)
+        .order("updated_at", { ascending: false });
+
+      if (!active) return;
+      if (error) {
+        console.error("스페이스 목록을 불러오지 못했습니다:", error.message);
+        return;
+      }
+
+      setSpaces(
+        data.map((space) => ({
+          id: space.id,
+          name: space.name,
+          description: space.description || "새로운 프로젝트 공간",
+          inviteCode: space.join_code,
+          members: [],
+          updated: formatUpdated(space.updated_at),
+          favorite: false,
+        }))
+      );
+    }
+
+    loadSpaces();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const joinableSpaces = [
     {
