@@ -7,6 +7,7 @@ import ErrorBoundary from '../components/ErrorBoundary'
 import { FileDropZone, readUploadFile } from '../components/FileDropZone'
 import MindmapCanvas from '../components/MindmapCanvas'
 import MindmapTree, { identityKey, memberColorMap } from '../components/MindmapTree'
+import { useTheme } from '../hooks/useTheme'
 import { connectSpaceRealtime } from '../realtime'
 import { applySpaceSession, findSpaceMembership, joinSpaceByCode } from '../spaceMembership'
 import { clearSession, loadSession, sessionMatchesSpace } from '../session'
@@ -112,6 +113,7 @@ function startResize(event, workspace, leftCol, rightCol, rightMin) {
 export default function SpacePage() {
   const { spaceId } = useParams()
   const navigate = useNavigate()
+  const { theme, toggleTheme } = useTheme()
   const [session, setSession] = useState(() => loadSession())
   const [space, setSpace] = useState(null)
   const [graph, setGraph] = useState(null)
@@ -513,8 +515,11 @@ export default function SpacePage() {
     </div>
   ) : null
 
+  const themeLabel = theme === 'dark' ? '라이트' : '다크'
+  const themeAria = theme === 'dark' ? '라이트 모드로 전환' : '다크 모드로 전환'
+
   return (
-    <div className="nlm-workspace">
+    <div className="nlm-workspace" data-theme={theme}>
       <header className="nlm-header">
         <div className="nlm-brand">
           <div className="nlm-logo">
@@ -533,6 +538,25 @@ export default function SpacePage() {
               <path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5" />
             </Icon>
             {copied ? '코드 복사됨' : `공유 ${space?.joinCode || session.joinCode || ''}`}
+          </button>
+          <button
+            type="button"
+            className="nlm-ghost"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? '라이트 모드' : '다크 모드'}
+            aria-label={themeAria}
+          >
+            {theme === 'dark' ? (
+              <Icon>
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              </Icon>
+            ) : (
+              <Icon>
+                <path d="M21 14.5A8.5 8.5 0 1 1 9.5 3 7 7 0 0 0 21 14.5Z" />
+              </Icon>
+            )}
+            {themeLabel}
           </button>
           <Link to="/join" className="nlm-ghost">
             <Icon>
