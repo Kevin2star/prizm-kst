@@ -63,13 +63,13 @@ function similarity(
 async function fillFallbackSummary(
   admin: SupabaseClient,
   groupId: number,
-  members: Array<{ id: number; title: string; members: { nickname: string; major: string } | { nickname: string; major: string }[] }>,
+  members: Array<{ id: number; title: string; members: { nickname: string } | { nickname: string }[] }>,
 ) {
   const diffs = members.map((artifact) => {
     const member = Array.isArray(artifact.members) ? artifact.members[0] : artifact.members;
     return {
       artifactId: num(artifact.id),
-      summary: `${member.nickname}(${member.major}) / ${artifact.title}`,
+      summary: `${member.nickname} / ${artifact.title}`,
     };
   });
   await admin.from("artifact_groups").update({
@@ -89,12 +89,12 @@ async function refreshSummary(
     title: string;
     content: string;
     tags: string | null;
-    members: { nickname: string; school: string; major: string } | { nickname: string; school: string; major: string }[];
+    members: { nickname: string } | { nickname: string }[];
   }>,
 ) {
   const input = members.map((artifact) => {
     const member = Array.isArray(artifact.members) ? artifact.members[0] : artifact.members;
-    return `- id=${artifact.id} nickname=${member.nickname} school=${member.school} major=${member.major} title=${artifact.title} tags=${artifact.tags}\ncontent=${artifact.content}\n`;
+    return `- id=${artifact.id} nickname=${member.nickname} title=${artifact.title} tags=${artifact.tags}\ncontent=${artifact.content}\n`;
   }).join("");
   const prompt =
     `아래 결과물들을 하나로 합치지 말고 비교 정리본 JSON만 반환하라. 마크다운 금지.\n` +
@@ -121,7 +121,7 @@ async function refreshSummary(
 export async function assignGroup(admin: SupabaseClient, artifactId: number): Promise<number | null> {
   const { data: current, error } = await admin
     .from("artifacts")
-    .select("id, space_id, title, content, tags, embedding, status, group_id, members(nickname, school, major)")
+    .select("id, space_id, title, content, tags, embedding, status, group_id, members(nickname)")
     .eq("id", artifactId)
     .maybeSingle();
   if (error || !current || !current.embedding || current.status !== "READY") return null;
@@ -162,7 +162,7 @@ export async function assignGroup(admin: SupabaseClient, artifactId: number): Pr
 
   const { data: members } = await admin
     .from("artifacts")
-    .select("id, title, content, tags, members(nickname, school, major)")
+    .select("id, title, content, tags, members(nickname)")
     .eq("group_id", groupId);
   const list = members ?? [];
   if (list.length >= 2) {

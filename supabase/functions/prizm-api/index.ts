@@ -59,8 +59,6 @@ function memberJson(spaceId: number, member: Record<string, unknown>) {
     memberId,
     spaceId,
     nickname: member.nickname,
-    school: member.school,
-    major: member.major,
   };
 }
 
@@ -93,8 +91,6 @@ Deno.serve(async (req) => {
       const { data: space } = await admin.from("spaces").select("*").eq("join_code", code).maybeSingle();
       if (!space) throw new HttpError(404, "SPACE_NOT_FOUND", "참여 코드를 찾을 수 없습니다.");
       const nickname = requireText(body.nickname, "NICKNAME_REQUIRED", "닉네임을 입력하세요.");
-      const school = requireText(body.school, "SCHOOL_REQUIRED", "학교를 입력하세요.");
-      const major = requireText(body.major, "MAJOR_REQUIRED", "전공을 입력하세요.");
       const spaceId = num(space.id);
       const requestedId = Number(body.memberId);
       if (Number.isFinite(requestedId) && requestedId > 0) {
@@ -112,19 +108,13 @@ Deno.serve(async (req) => {
         .eq("space_id", space.id);
       if (existingError) throw existingError;
       const nickKey = normIdentity(nickname);
-      const schoolKey = normIdentity(school);
-      const majorKey = normIdentity(major);
       const matched = (existingRows ?? []).find((row) =>
-        normIdentity(row.nickname) === nickKey &&
-        normIdentity(row.school) === schoolKey &&
-        normIdentity(row.major) === majorKey
+        normIdentity(row.nickname) === nickKey
       );
       if (matched) return json(memberJson(spaceId, matched as Record<string, unknown>));
       const { data: member, error } = await admin.from("members").insert({
         space_id: space.id,
         nickname,
-        school,
-        major,
       }).select("*").single();
       if (error) throw error;
       return json(memberJson(spaceId, member as Record<string, unknown>));
@@ -145,7 +135,7 @@ Deno.serve(async (req) => {
       if (req.method === "GET") {
         const { data, error } = await admin
           .from("artifacts")
-          .select("*, members(nickname, school, major)")
+          .select("*, members(nickname)")
           .eq("space_id", spaceId)
           .order("created_at", { ascending: false });
         if (error) throw error;
@@ -170,7 +160,7 @@ Deno.serve(async (req) => {
           content,
           tags: "[]",
           status: "PENDING",
-        }).select("*, members(nickname, school, major)").single();
+        }).select("*, members(nickname)").single();
         if (error) throw error;
         scheduleAnalyze(num(saved.id));
         return json(artifactResponse(saved as Record<string, unknown>), 201);
@@ -195,7 +185,7 @@ Deno.serve(async (req) => {
     if (req.method === "GET" && artifactMatch) {
       const { data, error } = await admin
         .from("artifacts")
-        .select("*, members(nickname, school, major)")
+        .select("*, members(nickname)")
         .eq("id", Number(artifactMatch[1]))
         .maybeSingle();
       if (error || !data) throw new HttpError(404, "ARTIFACT_NOT_FOUND", "결과물을 찾을 수 없습니다.");
@@ -209,7 +199,7 @@ Deno.serve(async (req) => {
       if (!group) throw new HttpError(404, "GROUP_NOT_FOUND", "그룹을 찾을 수 없습니다.");
       const { data: artifacts } = await admin
         .from("artifacts")
-        .select("id, title, members(nickname, school, major)")
+        .select("id, title, members(nickname)")
         .eq("group_id", groupId);
       const diffs = parseJsonArray<unknown>(group.differences, []);
       return json({
@@ -226,8 +216,6 @@ Deno.serve(async (req) => {
             id: num(artifact.id),
             title: artifact.title,
             memberNickname: member?.nickname,
-            school: member?.school,
-            major: member?.major,
           };
         }),
       });

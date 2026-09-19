@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { validateEmail, validateNickname, validatePassword } from "../auth";
 import "./SignUp.css";
 
 function Signup() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
+  const [nickname, setNickname] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -14,6 +16,22 @@ function Signup() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    const emailCheck = validateEmail(email);
+    const nicknameCheck = validateNickname(nickname);
+    const passwordCheck = validatePassword(password);
+
+    if (!emailCheck.ok) {
+      alert(emailCheck.message);
+      return;
+    }
+    if (!nicknameCheck.ok) {
+      alert(nicknameCheck.message);
+      return;
+    }
+    if (!passwordCheck.ok) {
+      alert(passwordCheck.message);
+      return;
+    }
     if (password !== passwordConfirm) {
       alert("비밀번호가 서로 일치하지 않습니다.");
       return;
@@ -22,8 +40,11 @@ function Signup() {
     setLoading(true);
 
     const { error } = await supabase.auth.signUp({
-      email,
+      email: emailCheck.email,
       password,
+      options: {
+        data: { nickname: nicknameCheck.nickname },
+      },
     });
 
     setLoading(false);
@@ -34,7 +55,7 @@ function Signup() {
     }
 
     alert("인증 이메일을 보냈습니다. 이메일을 확인해주세요.");
-    navigate("/login");
+    navigate("/");
   };
 
   return (
@@ -58,6 +79,20 @@ function Signup() {
             placeholder="example@email.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+            autoComplete="email"
+            required
+          />
+
+          <label htmlFor="signup-nickname">닉네임</label>
+          <input
+            id="signup-nickname"
+            type="text"
+            placeholder="2자 이상 입력하세요"
+            value={nickname}
+            onChange={(event) => setNickname(event.target.value)}
+            minLength="2"
+            maxLength="80"
+            autoComplete="nickname"
             required
           />
 
@@ -69,6 +104,7 @@ function Signup() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             minLength="6"
+            autoComplete="new-password"
             required
           />
 
@@ -80,6 +116,7 @@ function Signup() {
             value={passwordConfirm}
             onChange={(event) => setPasswordConfirm(event.target.value)}
             minLength="6"
+            autoComplete="new-password"
             required
           />
 

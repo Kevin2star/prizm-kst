@@ -3,8 +3,8 @@ import { num, parseJsonArray } from "./admin.ts";
 
 function memberOf(row: { members?: unknown }) {
   const raw = row.members;
-  if (Array.isArray(raw)) return raw[0] ?? { nickname: "", school: "", major: "" };
-  return raw ?? { nickname: "", school: "", major: "" };
+  if (Array.isArray(raw)) return raw[0] ?? { nickname: "" };
+  return raw ?? { nickname: "" };
 }
 
 function parseTags(json: string | null): string[] {
@@ -21,8 +21,6 @@ function artifactNode(artifact: Record<string, unknown>) {
     label: artifact.title,
     status: artifact.status,
     nickname: member.nickname,
-    school: member.school,
-    major: member.major,
     tags: parseTags(artifact.tags as string | null),
   };
 }
@@ -52,8 +50,6 @@ function groupNode(group: Record<string, unknown>, members: Array<Record<string,
     };
     if (member) {
       item.nickname = member.nickname;
-      item.school = member.school;
-      item.major = member.major;
     }
     return item;
   });
@@ -91,7 +87,7 @@ export async function buildGraph(admin: SupabaseClient, spaceId: number) {
 
   const { data: artifacts } = await admin
     .from("artifacts")
-    .select("id, title, status, tags, group_id, created_at, members(nickname, school, major)")
+    .select("id, title, status, tags, group_id, created_at, members(nickname)")
     .eq("space_id", spaceId);
   const { data: groups } = await admin
     .from("artifact_groups")
@@ -138,8 +134,6 @@ export function artifactResponse(row: Record<string, unknown>) {
     spaceId: num(row.space_id),
     memberId: num(row.member_id),
     nickname: member.nickname,
-    school: member.school,
-    major: member.major,
     title: row.title,
     content: row.content,
     status: row.status,

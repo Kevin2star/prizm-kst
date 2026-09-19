@@ -2,8 +2,6 @@ const KEYS = {
   memberId: 'prizm.memberId',
   spaceId: 'prizm.spaceId',
   nickname: 'prizm.nickname',
-  school: 'prizm.school',
-  major: 'prizm.major',
   joinCode: 'prizm.joinCode',
 }
 
@@ -20,8 +18,6 @@ export function loadSession() {
     memberId: localStorage.getItem(KEYS.memberId),
     spaceId: localStorage.getItem(KEYS.spaceId),
     nickname: localStorage.getItem(KEYS.nickname),
-    school: localStorage.getItem(KEYS.school),
-    major: localStorage.getItem(KEYS.major),
     joinCode: localStorage.getItem(KEYS.joinCode),
   }
 }

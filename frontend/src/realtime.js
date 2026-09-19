@@ -50,7 +50,6 @@ export function connectSpaceRealtime(spaceId, onEvent) {
         emit({
           type: 'MEMBER_JOINED',
           nickname: payload.new?.nickname,
-          major: payload.new?.major,
         })
       })
       .subscribe((status) => {

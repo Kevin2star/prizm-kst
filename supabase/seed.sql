@@ -35,14 +35,14 @@ begin
   values ('교내 카페 개선안', 'CAFE01')
   returning id into space_id;
 
-  insert into public.members (space_id, nickname, school, major)
-  values (space_id, '민수', '한국대', '산업공학')
+  insert into public.members (space_id, nickname)
+  values (space_id, '민수')
   returning id into minsu_id;
-  insert into public.members (space_id, nickname, school, major)
-  values (space_id, '지현', '한국대', '컴퓨터공학')
+  insert into public.members (space_id, nickname)
+  values (space_id, '지현')
   returning id into jihyun_id;
-  insert into public.members (space_id, nickname, school, major)
-  values (space_id, '수아', '서울예대', '시각디자인')
+  insert into public.members (space_id, nickname)
+  values (space_id, '수아')
   returning id into sua_id;
 
   insert into public.artifact_groups (space_id, label, common_points, differences, notes)

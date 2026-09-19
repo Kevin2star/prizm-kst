@@ -54,14 +54,12 @@ export async function generateContent(model: string, prompt: string): Promise<st
 export async function generateTags(
   title: string,
   content: string,
-  school: string,
-  major: string,
 ): Promise<string[]> {
   const prompt =
     `다음 결과물에서 핵심 주제, 접근 방식, 사용 기술/관점을 한국어 명사구 태그 3~5개로 추출하라.\n` +
-    `전공명을 태그로 그대로 넣지 마라. JSON만 반환하고 마크다운 코드펜스를 쓰지 마라.\n` +
+    `JSON만 반환하고 마크다운 코드펜스를 쓰지 마라.\n` +
     `스키마: {"tags":["키워드1","키워드2","키워드3"]}\n` +
-    `제목: ${title}\n학교/전공(맥락일 뿐 태그 금지): ${school} / ${major}\n본문:\n${content}`;
+    `제목: ${title}\n본문:\n${content}`;
   const text = await generateContent(tagModel(), prompt);
   return parseTags(text);
 }

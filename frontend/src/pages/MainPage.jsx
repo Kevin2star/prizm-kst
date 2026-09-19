@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { loadMemberProfile, signOutMember } from "../auth";
 import "./MainPage.css";
 
 function BellIcon() {
@@ -110,6 +111,7 @@ function MainPage() {
   const [inviteSpace, setInviteSpace] = useState(null);
   const [copiedType, setCopiedType] = useState("");
 
+  const [member, setMember] = useState(null);
   const [joinCode, setJoinCode] = useState("");
   const [joinMessage, setJoinMessage] = useState("");
   const [joinStatus, setJoinStatus] = useState("");
@@ -118,9 +120,20 @@ function MainPage() {
   const [spaceDescription, setSpaceDescription] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
 
-  const handleLogout = () => {
+  useEffect(() => {
+    loadMemberProfile()
+      .then((profile) => setMember(profile))
+      .catch(() => setMember(null));
+  }, []);
+
+  const handleLogout = async () => {
+    await signOutMember();
     navigate("/");
   };
+
+  const displayName = member?.nickname || "사용자";
+  const displayEmail = member?.email || "";
+  const displayInitial = displayName.charAt(0);
 
   const [spaces, setSpaces] = useState([
     {
@@ -529,8 +542,8 @@ function MainPage() {
                 setOpenSpaceMenu(null);
               }}
             >
-              <div className="profile-circle">R</div>
-              <span className="profile-name">리즘</span>
+              <div className="profile-circle">{displayInitial}</div>
+              <span className="profile-name">{displayName}</span>
               <span className="profile-arrow">▾</span>
             </button>
 
@@ -538,12 +551,12 @@ function MainPage() {
               <div className="profile-menu">
                 <div className="profile-menu-user">
                   <div className="profile-circle large">
-                    R
+                    {displayInitial}
                   </div>
 
                   <div className="profile-menu-text">
-                    <strong>리즘</strong>
-                    <p>rism@prizm.com</p>
+                    <strong>{displayName}</strong>
+                    <p>{displayEmail}</p>
                   </div>
                 </div>
 
@@ -567,7 +580,7 @@ function MainPage() {
       <main className="main">
         <section className="welcome">
           <h1>
-            안녕하세요, 리즘님! <span>👋</span>
+            안녕하세요, {displayName}님! <span>👋</span>
           </h1>
           <p>
             오늘도 좋은 아이디어가 멋진 프로젝트로 이어지길 바라요.

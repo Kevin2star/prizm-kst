@@ -44,7 +44,7 @@ export default function GroupCards({ root, onOpenArtifact, onOpenSources }) {
         <article key={item.id} className="card">
           <h3>{item.label}</h3>
           <p>
-            {item.nickname} · {item.major}
+            {item.nickname}
           </p>
           <button type="button" className="linkish" onClick={() => onOpenArtifact(item.artifactId)}>
             소스 1개 보기

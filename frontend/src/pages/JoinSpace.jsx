@@ -5,7 +5,7 @@ import { loadSession, saveSession } from '../session'
 
 export default function JoinSpace() {
   const navigate = useNavigate()
-  const [form, setForm] = useState({ code: '', nickname: '', school: '', major: '' })
+  const [form, setForm] = useState({ code: '', nickname: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -21,16 +21,12 @@ export default function JoinSpace() {
       const session = loadSession()
       const member = await api.joinSpace(form.code, {
         nickname: form.nickname,
-        school: form.school,
-        major: form.major,
         memberId: session.memberId ? Number(session.memberId) : undefined,
       })
       saveSession({
         memberId: member.memberId,
         spaceId: member.spaceId,
         nickname: member.nickname,
-        school: member.school,
-        major: member.major,
         joinCode: form.code.toUpperCase(),
       })
       navigate(`/spaces/${member.spaceId}`)
@@ -55,14 +51,6 @@ export default function JoinSpace() {
         <label>
           닉네임
           <input value={form.nickname} onChange={(e) => setField('nickname', e.target.value)} />
-        </label>
-        <label>
-          학교
-          <input value={form.school} onChange={(e) => setField('school', e.target.value)} />
-        </label>
-        <label>
-          전공
-          <input value={form.major} onChange={(e) => setField('major', e.target.value)} />
         </label>
         <button className="btn primary" disabled={busy} type="submit">
           입장

@@ -129,26 +129,26 @@ export default function SpacePage() {
 
   const members = useMemo(() => {
     const map = new Map()
-    const add = (nickname, school, major, memberId) => {
+    const add = (nickname, memberId) => {
       if (!nickname) return
-      const key = identityKey(nickname, school, major, memberId)
+      const key = identityKey(nickname, memberId)
       const id = memberId == null ? null : String(memberId)
       const existing = map.get(key)
       if (!existing) {
-        map.set(key, { key, nickname, school, major, memberId: id })
+        map.set(key, { key, nickname, memberId: id })
         return
       }
       if (id && id === String(session.memberId)) existing.memberId = id
     }
-    add(session.nickname, session.school, session.major, session.memberId)
-    artifacts.forEach((item) => add(item.nickname, item.school, item.major, item.memberId))
+    add(session.nickname, session.memberId)
+    artifacts.forEach((item) => add(item.nickname, item.memberId))
     return [...map.values()]
-  }, [artifacts, session.memberId, session.major, session.nickname, session.school])
+  }, [artifacts, session.memberId, session.nickname])
 
   const memberColors = useMemo(() => memberColorMap(members), [members])
 
-  function personColor(nickname, school, major, memberId) {
-    return memberColors.get(identityKey(nickname, school, major, memberId)) || '#4b5563'
+  function personColor(nickname, memberId) {
+    return memberColors.get(identityKey(nickname, memberId)) || '#4b5563'
   }
 
   useEffect(() => {
@@ -161,7 +161,7 @@ export default function SpacePage() {
           id,
           name: item.nickname || '멤버',
           text: `결과물을 올렸습니다: ${item.title}`,
-          color: personColor(item.nickname, item.school, item.major, item.memberId),
+          color: personColor(item.nickname, item.memberId),
           mine: String(item.memberId) === String(session.memberId),
         })
       })
@@ -194,7 +194,7 @@ export default function SpacePage() {
     if (aiScrollRef.current) aiScrollRef.current.scrollTop = aiScrollRef.current.scrollHeight
   }, [aiMessages])
 
-  const majors = useMemo(() => [...collectMajors(graph?.root)], [graph])
+  const nicknames = useMemo(() => [...collectMajors(graph?.root)], [graph])
 
   function toggle(id) {
     setExpanded((current) => {
@@ -218,7 +218,7 @@ export default function SpacePage() {
         id: `u-${Date.now()}`,
         role: 'user',
         name: session.nickname,
-        color: personColor(session.nickname, session.school, session.major, session.memberId),
+        color: personColor(session.nickname, session.memberId),
         text: title.trim() ? `${heading}\n${body}` : body,
         mine: true,
       },
@@ -296,7 +296,7 @@ export default function SpacePage() {
         id: `t-${Date.now()}`,
         name: session.nickname,
         text,
-        color: personColor(session.nickname, session.school, session.major, session.memberId),
+        color: personColor(session.nickname, session.memberId),
         mine: true,
       },
     ])
@@ -331,7 +331,7 @@ export default function SpacePage() {
             </Icon>
             설정
           </Link>
-          <Link to="/join" className="nlm-avatar" title={`${session.nickname} / ${session.major}`}>
+          <Link to="/join" className="nlm-avatar" title={session.nickname}>
             {shortName(session.nickname)}
           </Link>
         </div>
@@ -345,12 +345,12 @@ export default function SpacePage() {
                 key={member.key}
                 className={`nlm-member${
                   member.memberId === String(session.memberId) ||
-                  member.key === identityKey(session.nickname, session.school, session.major, session.memberId)
+                  member.key === identityKey(session.nickname, session.memberId)
                     ? ' is-me'
                     : ''
                 }`}
                 style={{ background: memberColors.get(member.key) }}
-                title={`${member.nickname}${member.major ? ` · ${member.major}` : ''}`}
+                title={member.nickname}
               >
                 {shortName(member.nickname)}
               </div>
@@ -519,12 +519,12 @@ export default function SpacePage() {
             </div>
           </div>
           <div className="nlm-map-body">
-            {majors.length ? (
+            {nicknames.length ? (
               <div className="nlm-legend">
-                {majors.map((major) => (
-                  <span key={major}>
-                    <i style={{ background: colorForMajor(major) }} />
-                    {major}
+                {nicknames.map((name) => (
+                  <span key={name}>
+                    <i style={{ background: colorForMajor(name) }} />
+                    {name}
                   </span>
                 ))}
               </div>

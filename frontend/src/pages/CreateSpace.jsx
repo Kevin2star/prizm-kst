@@ -7,7 +7,7 @@ export default function CreateSpace() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [created, setCreated] = useState(null)
-  const [join, setJoin] = useState({ nickname: '', school: '', major: '' })
+  const [join, setJoin] = useState({ nickname: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -35,8 +35,6 @@ export default function CreateSpace() {
         memberId: member.memberId,
         spaceId: member.spaceId,
         nickname: member.nickname,
-        school: member.school,
-        major: member.major,
         joinCode: created.joinCode,
       })
       navigate(`/spaces/${member.spaceId}`)
@@ -80,14 +78,6 @@ export default function CreateSpace() {
             <label>
               닉네임
               <input value={join.nickname} onChange={(e) => setJoin({ ...join, nickname: e.target.value })} />
-            </label>
-            <label>
-              학교
-              <input value={join.school} onChange={(e) => setJoin({ ...join, school: e.target.value })} />
-            </label>
-            <label>
-              전공
-              <input value={join.major} onChange={(e) => setJoin({ ...join, major: e.target.value })} />
             </label>
             <button className="btn primary" disabled={busy} type="submit">
               이 스페이스로 입장

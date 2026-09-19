@@ -106,7 +106,7 @@ export default function SourcePanel({ title, items, onClose, onOpen, containerRe
                   {item.title || item.label}
                 </button>
                 <p>
-                  {item.nickname || item.memberNickname} · {item.school} · {item.major}
+                  {item.nickname || item.memberNickname}
                 </p>
               </li>
             ))}
@@ -114,7 +114,7 @@ export default function SourcePanel({ title, items, onClose, onOpen, containerRe
         ) : (
           <article className="panel-article">
             <p>
-              {items.nickname} · {items.school} · {items.major}
+              {items.nickname}
             </p>
             <p className="tags">{(items.tags || []).join(' · ')}</p>
             <p className="body-text">{items.content}</p>

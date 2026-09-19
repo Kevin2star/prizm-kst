@@ -68,9 +68,9 @@ function graphToChart(node, expanded) {
         id: `${node.id}::item-${item.artifactId ?? index}`,
         name: String(item.summary || '').replace(/\s+/g, ' ').trim(),
         type: 'ITEM',
-        color: colorForMajor(item.major),
+        color: colorForMajor(item.nickname),
         artifactId: item.artifactId,
-        major: item.major,
+        nickname: item.nickname,
         expandable: false,
       })
     })
@@ -93,8 +93,8 @@ function graphToChart(node, expanded) {
     id: node.id,
     name: `${node.label || ''}${statusSuffix(node)}`,
     type: node.type,
-    color: node.major
-      ? colorForMajor(node.major)
+    color: node.nickname
+      ? colorForMajor(node.nickname)
       : node.status === 'FAILED'
         ? '#ef4444'
         : node.status === 'PENDING' || node.status === 'PROCESSING'

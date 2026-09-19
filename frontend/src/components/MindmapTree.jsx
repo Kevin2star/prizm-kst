@@ -19,20 +19,17 @@ const MEMBER_PALETTE = [
   '#a21caf',
 ]
 
-export function colorForMajor(major) {
-  if (!major) return '#9ca3af'
+export function colorForMajor(label) {
+  if (!label) return '#9ca3af'
   let hash = 0
-  for (let i = 0; i < major.length; i += 1) hash = (hash * 31 + major.charCodeAt(i)) >>> 0
+  for (let i = 0; i < label.length; i += 1) hash = (hash * 31 + label.charCodeAt(i)) >>> 0
   return PALETTE[hash % PALETTE.length]
 }
 
-export function identityKey(nickname, school, major, memberId) {
-  const nick = String(nickname || '').trim().toLowerCase()
-  const sch = String(school || '').trim().toLowerCase()
-  const maj = String(major || '').trim().toLowerCase()
-  if (nick && sch && maj) return `${nick}|${sch}|${maj}`
+export function identityKey(nickname, memberId) {
   if (memberId != null && String(memberId).trim() !== '') return `id:${memberId}`
-  return nick ? `nick:${nick}` : `id:${memberId || 'unknown'}`
+  const nick = String(nickname || '').trim().toLowerCase()
+  return nick ? `nick:${nick}` : 'id:unknown'
 }
 
 export function memberColorMap(members) {
@@ -51,9 +48,9 @@ export function memberColorMap(members) {
 
 export function collectMajors(node, set = new Set()) {
   if (!node) return set
-  if (node.major) set.add(node.major)
+  if (node.nickname) set.add(node.nickname)
   ;(node.children || []).forEach((child) => collectMajors(child, set))
-  ;(node.items || []).forEach((item) => item.major && set.add(item.major))
+  ;(node.items || []).forEach((item) => item.nickname && set.add(item.nickname))
   return set
 }
 
@@ -73,7 +70,7 @@ export default function MindmapTree({ node, expanded, onToggle, onOpenArtifact, 
     return (
       <div className="tree-node" style={indent}>
         <button type="button" className="tree-label" onClick={() => onOpenArtifact(node.artifactId)}>
-          <span className="dot" style={{ background: colorForMajor(node.major) }} />
+          <span className="dot" style={{ background: colorForMajor(node.nickname) }} />
           {node.label}
           <StatusMark status={node.status} />
         </button>
@@ -106,7 +103,7 @@ export default function MindmapTree({ node, expanded, onToggle, onOpenArtifact, 
           {node.body ? <p className="tree-body">{node.body}</p> : null}
           {node.items?.map((item) => (
             <p key={`${item.artifactId}-${item.summary}`} className="tree-body">
-              <span className="dot" style={{ background: colorForMajor(item.major) }} />
+              <span className="dot" style={{ background: colorForMajor(item.nickname) }} />
               {item.summary}
             </p>
           ))}
