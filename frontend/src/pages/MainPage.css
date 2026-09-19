@@ -954,17 +954,25 @@ button {
 }
 
 .join-code-message {
-  margin-right: 5px;
+  align-self: center;
+  margin: 0 5px 0 0;
+  padding: 0;
+
+  background: transparent;
+  border: none;
 
   font-size: 11px;
+  line-height: 1.4;
 }
 
 .join-code-message.success {
   color: #4c9a6a;
+  background: transparent;
 }
 
 .join-code-message.error {
   color: #e45858;
+  background: transparent;
 }
 
 /* INVITATIONS */
