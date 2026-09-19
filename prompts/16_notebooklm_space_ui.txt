@@ -1,0 +1,191 @@
+역할: React 프론트엔드 엔지니어.
+선행 단계: 01~15가 이미 끝난 상태. 스페이스 생성/입장, 업로드, graph API, 실시간 갱신, 소스 패널이 동작한다.
+이번 단계 목표: /spaces/:spaceId 화면을 frontend/public/notebooklm_clone.html 과 같은 레이아웃·톤으로 바꾼다. 기존 P0 기능은 유지한다.
+다음 단계: 없음. UI 리쉘만 한다.
+
+이 파일을 코딩 에이전트에 그대로 붙여넣는다.
+
+================================================================
+한 줄 정의
+================================================================
+현재 밝은 3열(업로드 / 들여쓰기 트리 / 소스 패널) 스페이스 페이지를,
+다크 NotebookLM 클론 HTML과 같은 전체화면 워크스페이스로 다시 깐다.
+클론은 시각·인터랙션 스펙이다. 클론의 데모 로직(가짜 팀원, 랜덤 노드 추가)을
+제품 로직으로 바꾸면 안 된다.
+
+================================================================
+현재 상태 (As-Is)
+================================================================
+라이브 UI는 밝은 테마의 /spaces/:spaceId 이다.
+
+헤더
+  - PRIZM, 스페이스 이름, 입장 코드, 내 닉네임/전공, "다른 프로필"
+
+왼쪽 열
+  - 결과물 올리기: 제목 input, 본문 textarea, 업로드 버튼
+  - 최근 업로드: title, 닉네임, PENDING/READY/FAILED. 클릭 시 원문
+
+가운데 열
+  - 전공 범례 점
+  - MindmapTree: 재귀 들여쓰기 리스트 (▾/▸ 접기)
+  - 그룹 → 공통점/차이점/비고/원본 목록
+  - "소스 N개 보기" 링크
+  - 트리 에러 시 GroupCards 폴백
+
+오른쪽 열 (조건부)
+  - SourcePanel: 원문 또는 소스 목록, 닫기
+
+핵심 데이터 바인딩 (절대 버리지 말 것)
+  - GET space / graph / artifacts
+  - POST artifact (memberId, title, content)
+  - GET artifact 상세
+  - connectSpaceRealtime 로 graph/목록 갱신
+  - session (nickname, major, memberId, joinCode)
+  - ErrorBoundary + GroupCards 안전망
+
+관련 파일
+  - frontend/src/pages/SpacePage.jsx
+  - frontend/src/components/MindmapTree.jsx
+  - frontend/src/components/SourcePanel.jsx
+  - frontend/src/components/GroupCards.jsx
+  - frontend/src/App.css, frontend/src/index.css
+  - frontend/public/notebooklm_clone.html  ← 목표 스펙 (읽기 전용 참고)
+  - frontend/package.json  (지금은 React+Vite. Tailwind/d3/font-awesome 없음)
+
+================================================================
+목표 상태 (To-Be) — notebooklm_clone.html
+================================================================
+클론 구조 (위에서 아래, 왼쪽에서 오른쪽):
+
+1) 상단 헤더 (h-14, 다크)
+   - 왼쪽: 원형 로고 + 프로젝트 이름(스페이스 이름)
+   - 오른쪽: 공유 / 설정 / 프로필 아바타
+   - 제품 매핑: 입장 코드는 공유 버튼 또는 헤더 서브텍스트에 둔다.
+     "다른 프로필"은 설정 또는 프로필 클릭 → /join.
+
+2) 왼쪽 고정 사이드바 (72px)
+   - 하단 정렬된 팀원 아바타 + "TEAM"
+   - 활성 멤버는 opacity 1 + 흰 테두리 + scale
+   - 제품 매핑: 하드코딩 박가희/김명석/이민수가 아니라
+     artifacts/graph에서 뽑은 실제 멤버(닉네임, 전공색).
+     현재 세션 멤버가 active. 클릭으로 "내가 누구로 보이는지"를
+     바꾸지 않는다(세션 위조 금지). 하이라이트만 현재 사용자.
+
+3) Pane 1 팀 채팅 (초기 너비 ~20%, min 200px)
+   - 헤더 "팀 채팅", 메시지 리스트, 하단 textarea
+   - 백엔드 채팅 API는 없다. P0가 아니다.
+   - 허용: 세션 동안만 로컬 state. 새로고침하면 사라져도 됨.
+   - 금지: 채팅 때문에 업로드/graph를 막거나 새 테이블을 만들기.
+   - 비고: 최근 업로드 요약을 시스템 메시지로 넣어 패널이 비지 않게 해도 된다.
+
+4) Resizer 1 (8px col-resize)
+
+5) Pane 2 AI 채팅 (초기 너비 ~20%, min 200px)
+   - 헤더 "AI 채팅", 히스토리, 하단 입력
+   - 클론의 "AI 분석 요청"은 제품의 결과물 업로드와 같다.
+   - 반드시 POST /artifacts 를 호출한다.
+     입력 한 줄만 있으면 title은 앞 40자, content는 전체.
+     가능하면 제목/본문을 구분하는 작은 UI(접히는 제목 필드)를 유지한다.
+   - 업로드 후 낙관적 메시지 + PENDING. Realtime/refresh로 READY 반영.
+   - 클론처럼 800ms 후 랜덤 카테고리에 노드를 직접 push 하지 말 것.
+     마인드맵은 오직 graph API 응답으로 그린다.
+   - 최근 업로드 목록은 이 패널 안 접이식 또는 메시지 메타로 흡수한다.
+
+6) Resizer 2
+
+7) Pane 3 마인드맵 (나머지 ~60%, min 300px)
+   - 헤더: "마인드 맵" + zoom in/out/fit
+   - 본문: 수평 d3.tree (force-directed 금지)
+   - 노드 클릭: 기존과 동일
+       GROUP/COMMON/DIFF/NOTES/SOURCES → 펼침/접힘
+       ARTIFACT → SourcePanel (원문)
+       "소스 N개" → SourcePanel 목록
+   - PENDING/FAILED/업데이트됨 표시 유지
+   - 전공 색: 클론의 member color처럼 노드 stroke/링크에 사용
+   - 범례는 캔버스 모서리
+   - 렌더 실패 시 기존 GroupCards 폴백 유지
+   - SourcePanel은 이 pane 위 오버레이(오른쪽 슬라이드)로 연다.
+     네 번째 고정 칼럼을 만들어 레이아웃을 깨지 말 것.
+
+전체
+  - body overflow hidden, 뷰포트 100vh, 커스텀 스크롤바
+  - 다크 토큰을 클론과 맞출 것:
+    bgMain #1e1e1e / bgHeader #2a2a2a / bgPanel #252525 /
+    bgInput #171717 / borderMain #333333 / textMain #e0e0e0 /
+    textMuted #888888 / primary #60a5fa
+  - 홈/생성/입장 페이지는 이번 단계에서 필수 개편 대상이 아니다.
+    스페이스 페이지가 다크여도 다른 라우트가 깨지면 안 된다.
+    스페이스 셸에만 다크 클래스를 씌우거나, 토큰을 페이지 스코프로 한정한다.
+
+================================================================
+진행 순서 (이 순서를 지킬 것)
+================================================================
+Phase A — 스펙 고정
+  1. notebooklm_clone.html 전체를 읽고 레이아웃/리사이저/D3/채팅 동작을 파악한다.
+  2. SpacePage.jsx와 MindmapTree.jsx의 데이터 계약(node.type, sourceArtifactIds 등)을 적는다.
+  3. 클론 데모 코드와 제품 코드를 표로 대응시킨다. 구현은 React로만 한다.
+     iframe으로 html을 끼워 넣지 않는다.
+
+Phase B — 셸 레이아웃만
+  4. SpacePage를 클론과 같은 DOM 골격으로 바꾼다.
+     header + 72px sidebar + team pane + resizer + ai pane + resizer + mindmap pane.
+  5. 기존 업로드 폼·최근 목록·트리를 임시로 해당 pane에 옮겨 기능이 죽지 않게 한다.
+     이 시점에서 아직 D3가 아니어도 된다.
+  6. 리사이저를 React로 포팅한다. 클론의 min-width(200/200/300)와
+     workspace 너비 − sidebar 72px 계산을 유지한다.
+     마우스업 시 listener를 반드시 제거한다.
+
+Phase C — AI 채팅 = 업로드
+  7. AI 입력 submit → api.createArtifact. 성공 시 폼/입력 비우기, busy disable.
+  8. 히스토리에 내 메시지 / "분석 중" 인디케이터 / 서버 상태 메시지를 남긴다.
+  9. 팀 채팅은 로컬 only. 엔터로 전송, Shift+Enter는 줄바꿈.
+
+Phase D — 마인드맵
+  10. d3를 frontend 의존성으로 추가한다 (CDN 스크립트 태그 금지).
+  11. 새 컴포넌트(예: MindmapCanvas.jsx)에서 d3.tree + d3.linkHorizontal + zoom을 그린다.
+      graph.root를 hierarchy 데이터로 변환한다. 클론의 treeData 모양을 강제하지 말고
+      기존 graph JSON(type, label, children, items, body, status)을 매핑한다.
+  12. 기본 펼침: 루트와 GROUP. 공통점/차이점/비고/원본은 접힘.
+      접힌 노드는 d3의 children/_children 패턴 또는 기존 expanded Set을 쓴다.
+  13. zoom 버튼 연결. ResizeObserver로 pane 크기 변화에 viewBox를 맞춘다.
+  14. MindmapTree.jsx는 삭제하지 말고, D3 실패 시 ErrorBoundary 안에서 폴백으로 남겨 둔다.
+
+Phase E — 팀/소스/다듬기
+  15. 사이드바 멤버: graph/artifacts 기반. colorForMajor 재사용 가능.
+  16. SourcePanel을 다크 오버레이로 리스타일. 필드(제목, 닉네임/학교/전공, 태그, 본문)는 유지.
+  17. Font Awesome은 클론과 비슷한 아이콘이 필요하면 패키지 또는 인라인 SVG.
+      CDN을 index.html에 넣는 것은 가능하나, 레이아웃이 CDN 실패에 의존하면 안 된다.
+  18. Tailwind CDN(클론 방식)을 제품에 넣지 않는다. 기존 CSS 또는 정식 Tailwind 설치 중 택1.
+      해커톤이면 SpacePage 스코프 CSS가 더 안전하다.
+
+Phase F — 검증
+  19. 브라우저에서 /spaces/:id 를 연다. 스크린샷만으로 끝내지 않는다.
+  20. 업로드 → 목록/채팅에 PENDING → 분석 후 마인드맵 갱신.
+  21. 노드 펼침, 소스 N개, 원문 패널 닫기.
+  22. 리사이저 드래그, 줌, 좁은 폭에서 min-width.
+  23. 트리 고의 실패 또는 빈 graph에서도 흰 화면이 아니어야 한다.
+  24. / , /create , /join 이 여전히 동작한다.
+
+================================================================
+하지 말 것
+================================================================
+- d3-force, Cytoscape cose 등 force-directed 그래프
+- 클론 JS의 addMindMapNode 랜덤 분류를 제품에 이식
+- 팀 채팅 백엔드, 로그인, 파일 업로드(P1), 노드 드래그 이동(P2)
+- Gemini를 프론트에서 직접 호출
+- notebooklm_clone.html 을 라우트에 iframe으로 마운트
+- 기존 api.js / realtime.js / session.js 계약을 깨는 것
+- SourcePanel·업로드·graph 폴백을 "나중에"라며 제거
+- 전역 다크 테마를 강제해서 랜딩/입장 폼을 읽기 어렵게 만드는 것
+- 기능이 빠진 예쁜 껍데기만 커밋
+
+================================================================
+완료 기준
+================================================================
+- /spaces/:spaceId 가 클론과 같은 골격이다:
+  다크 헤더, 72px 팀 레일, 팀 채팅, AI 채팅, 리사이저 2개, 넓은 마인드맵.
+- 제목+본문(또는 AI 입력) 업로드가 실제로 artifact를 만들고, 새로고침 후에도 남는다.
+- 마인드맵은 graph API 트리이며, 접기/펼치기·소스 보기·원문 보기가 된다.
+- 힘-방향 그래프가 코드에 없다.
+- 시각화 실패 시 GroupCards 또는 동등한 폴백이 보인다.
+- 클론 HTML 파일은 public에 참고용으로 남겨 두되, 앱 런타임이 그것을 로드하지 않는다.
