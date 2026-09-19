@@ -114,8 +114,8 @@ function MainPage() {
   const [editingSpace, setEditingSpace] = useState(null);
   const [editingName, setEditingName] = useState("");
 
-  const [inviteSpace, setInviteSpace] = useState(null);
   const [copiedType, setCopiedType] = useState("");
+  const [draftInviteCode, setDraftInviteCode] = useState("");
 
   const [joinCode, setJoinCode] = useState("");
   const [joinMessage, setJoinMessage] = useState("");
@@ -123,7 +123,6 @@ function MainPage() {
 
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
 
   useEffect(() => {
     const getUser = async () => {
@@ -309,7 +308,7 @@ function MainPage() {
       id: Date.now(),
       name: spaceName.trim(),
       description: spaceDescription.trim() || "새로운 프로젝트 공간",
-      inviteCode: makeInviteCode(),
+      inviteCode: draftInviteCode || makeInviteCode(),
       members: [{ initial: nickname.charAt(0).toUpperCase(), name: nickname }],
       updated: "방금 전",
       favorite: false,
@@ -319,7 +318,8 @@ function MainPage() {
 
     setSpaceName("");
     setSpaceDescription("");
-    setInviteEmail("");
+    setDraftInviteCode("");
+    setCopiedType("");
     setShowModal(false);
   };
 
@@ -464,14 +464,8 @@ function MainPage() {
     setOpenSpaceMenu(null);
   };
 
-  const openInviteModal = (space) => {
-    setInviteSpace(space);
-    setOpenSpaceMenu(null);
-    setCopiedType("");
-  };
-
-  const getInviteLink = (space) => {
-    return `${window.location.origin}/join/${space.inviteCode}`;
+  const getInviteLink = (inviteCode) => {
+    return `${window.location.origin}/join/${inviteCode}`;
   };
 
   const copyText = async (text, type) => {
@@ -688,16 +682,6 @@ function MainPage() {
                             <span>이름 변경</span>
                           </button>
 
-                          <button
-                            className="space-menu-item"
-                            onClick={() =>
-                              openInviteModal(space)
-                            }
-                          >
-                            <LinkIcon />
-                            <span>초대하기</span>
-                          </button>
-
                           <div className="space-menu-divider" />
 
                           <button
@@ -747,6 +731,8 @@ function MainPage() {
               className="space-card create-card"
               onClick={(e) => {
                 e.stopPropagation();
+                setDraftInviteCode(makeInviteCode());
+                setCopiedType("");
                 setShowModal(true);
                 setShowProfile(false);
                 setShowNotifications(false);
@@ -911,14 +897,49 @@ function MainPage() {
               placeholder="프로젝트를 간단하게 설명해주세요."
             />
 
-            <label>팀원 이메일 초대</label>
-            <input
-              value={inviteEmail}
-              onChange={(e) =>
-                setInviteEmail(e.target.value)
-              }
-              placeholder="team@example.com"
-            />
+            <label>팀원 초대</label>
+
+            <div className="share-list create-share-list">
+              <div className="share-row">
+                <div className="share-info">
+                  <span className="share-label">초대 링크</span>
+                  <span className="share-value">
+                    {getInviteLink(draftInviteCode)}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  className="share-copy-button"
+                  onClick={() =>
+                    copyText(getInviteLink(draftInviteCode), "create-link")
+                  }
+                >
+                  <CopyIcon />
+                  {copiedType === "create-link" ? "복사됨" : "복사"}
+                </button>
+              </div>
+
+              <div className="share-row">
+                <div className="share-info">
+                  <span className="share-label">참여 코드</span>
+                  <span className="share-value code-value">
+                    {draftInviteCode}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  className="share-copy-button"
+                  onClick={() =>
+                    copyText(draftInviteCode, "create-code")
+                  }
+                >
+                  <CopyIcon />
+                  {copiedType === "create-code" ? "복사됨" : "복사"}
+                </button>
+              </div>
+            </div>
 
             <div className="modal-buttons">
               <button
@@ -997,88 +1018,6 @@ function MainPage() {
         </div>
       )}
 
-      {/* 초대 */}
-      {inviteSpace && (
-        <div
-          className="modal-background"
-          onClick={() => setInviteSpace(null)}
-        >
-          <div
-            className="invite-modal"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="invite-modal-header">
-              <div>
-                <h2>스페이스 초대</h2>
-                <span>{inviteSpace.name}</span>
-              </div>
-
-              <button
-                className="close-button"
-                onClick={() => setInviteSpace(null)}
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="share-list">
-              <div className="share-row">
-                <div className="share-info">
-                  <span className="share-label">
-                    초대 링크
-                  </span>
-
-                  <span className="share-value">
-                    {getInviteLink(inviteSpace)}
-                  </span>
-                </div>
-
-                <button
-                  className="share-copy-button"
-                  onClick={() =>
-                    copyText(
-                      getInviteLink(inviteSpace),
-                      "link"
-                    )
-                  }
-                >
-                  <CopyIcon />
-                  {copiedType === "link"
-                    ? "복사됨"
-                    : "복사"}
-                </button>
-              </div>
-
-              <div className="share-row">
-                <div className="share-info">
-                  <span className="share-label">
-                    참여 코드
-                  </span>
-
-                  <span className="share-value code-value">
-                    {inviteSpace.inviteCode}
-                  </span>
-                </div>
-
-                <button
-                  className="share-copy-button"
-                  onClick={() =>
-                    copyText(
-                      inviteSpace.inviteCode,
-                      "code"
-                    )
-                  }
-                >
-                  <CopyIcon />
-                  {copiedType === "code"
-                    ? "복사됨"
-                    : "복사"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
