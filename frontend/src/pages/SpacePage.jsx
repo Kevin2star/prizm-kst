@@ -577,6 +577,7 @@ export default function SpacePage() {
                 items={panel.items}
                 onClose={() => setPanel(null)}
                 onOpen={openArtifact}
+                containerRef={mapRef}
               />
             ) : null}
           </div>

@@ -1,0 +1,116 @@
+역할: React 프론트엔드 엔지니어.
+선행 단계: 17_mindmap_overlap_member_identity.txt 가 이미 적용된 상태.
+이번 단계 목표: 마인드맵 오른쪽 원문/상세 패널(SourcePanel)의 본문 잘림을 실제로 없애고, 사용자가 그 패널 너비를 드래그로 조절할 수 있게 한다.
+다음 단계: 없음. 이 UI만 고친다.
+
+이 파일을 코딩 에이전트에 그대로 붙여넣는다. 구현하고 브라우저에서 확인한다. 프롬프트만 쓰고 끝내지 말 것.
+
+================================================================
+한 줄 정의
+================================================================
+소스 패널 본문이 오른쪽에서 한 글자씩 잘려 보이는 버그를 고치고,
+패널 왼쪽 가장자리를 잡아 너비를 조절할 수 있게 한다.
+
+================================================================
+재현 (스크린샷)
+================================================================
+원문 패널 제목 "카페 대기열 재배치", 작성자 "민수 · 한국대 · 산업공학",
+태그 "대기시간 · 동선 · 대기열" 아래 본문이 줄은 바뀌지만
+각 줄 오른쪽 끝이 잘린다. 예:
+  "출입문을 막"  (원문은 "막고"일 가능성이 큼)
+  "픽업이 한 줄에서 섞이는 지"  ("지점"이 잘림)
+  "픽업 라" / "원 모양이 되" / "되어" 등
+줄바꿈은 되지만 줄의 마지막 글자가 컨테이너 밖으로 나가
+.nlm-workspace { overflow: hidden } 에 잘린다.
+
+17단계에서 width: min(420px, 42%) 와 word-break 를 넣었지만 잘림은 남았다.
+overflow-x: visible + overflow-y: auto 조합이 원인 후보이다.
+(한쪽만 visible이면 브라우저가 overflow-x를 auto로 계산하고,
+텍스트 줄바꿈 너비와 클립 영역이 어긋난다.)
+
+================================================================
+현재 코드 (As-Is)
+================================================================
+frontend/src/components/SourcePanel.jsx
+  - aside.panel > .panel-head + article.panel-article > .body-text
+  - 리사이저 없음. 너비는 CSS 고정.
+
+frontend/src/pages/SpacePage.jsx
+  - nlm-map-body 안에 panel이 있으면 SourcePanel 오버레이
+  - 팀/AI/맵 열 사이에는 이미 startResize() 드래그 리사이저가 있다.
+    소스 패널에는 이 패턴이 없다.
+
+frontend/src/pages/SpaceWorkspace.css
+  .nlm-workspace { overflow: hidden; }
+  .nlm-map-body { position: relative; min-height: 0; }
+  .nlm-workspace .panel {
+    position: absolute; top/right/bottom: 0;
+    width: min(420px, 42%);
+    overflow-x: visible;
+    overflow-y: auto;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+
+frontend/src/App.css
+  .body-text { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+
+================================================================
+목표 (To-Be)
+================================================================
+A. 본문이 잘리지 않게
+   1) .nlm-workspace .panel 에서 overflow-x: visible 을 제거한다.
+      overflow-x: hidden; overflow-y: auto;  (가로는 자르지 말고 줄바꿈, 세로만 스크롤)
+   2) 패널과 내부(h2, article, p, .body-text)에
+      width: 100%; max-width: 100%; min-width: 0;
+      box-sizing: border-box;
+      overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap;
+   3) 패딩 때문에 줄바꿈 너비가 박스보다 커지지 않게 한다.
+      padding은 패널에만 두거나, 안쪽에 padding을 주고 패널 width는 100%로 맞춘다.
+   4) 세로 스크롤바(6px)가 본문을 가리지 않게 padding-right를 스크롤바만큼 여유 둔다.
+   5) 부모 .nlm-map-body / .nlm-pane-map 이 패널보다 좁게 클립하면
+      패널이 맵 열 안에서만 잘리도록 하고, 글자는 패널 너비 안에서 반드시 접힌다.
+   6) 긴 한글·공백 없는 구간에 대해 브라우저에서 원문 한 편을 열어
+      오른쪽 끝 글자가 보이는지 확인한다. "막아" "지점" "된다"가 잘리면 실패.
+
+B. 사용자가 너비를 조절
+   1) 소스 패널 왼쪽 가장자리에 세로 리사이저(약 8px)를 둔다.
+      기존 .nlm-resizer 와 비슷한 룩. 커서 col-resize.
+   2) 드래그하면 패널 width가 변한다. 본문은 새 너비에 맞춰 다시 줄바꿈한다.
+   3) 최소 너비 280px, 최대는 마인드맵 열 너비의 약 80% (맵이 완전히 사라지지 않게).
+   4) 기본 너비는 현재보다 넓게 시작해도 된다 (예: 440px 또는 맵 열의 45%).
+   5) 같은 세션 동안 너비를 기억한다. localStorage 키 하나면 충분
+      (예: prizm.sourcePanelWidth). 새로고침 후에도 유지되면 더 좋다.
+   6) 패널이 닫히면 리사이저도 같이 사라진다. 다시 열면 마지막 너비로 연다.
+   7) 팀 채팅 / AI 열 리사이저(startResize)는 건드리지 않는다. 깨지면 안 된다.
+
+구현 힌트
+  - SourcePanel에 style={{ width }} 와 왼쪽 핸들 onMouseDown.
+  - 너비 state는 SpacePage 또는 SourcePanel 중 한곳에만 둔다.
+  - 드래그 중 document mousemove/mouseup. 기존 startResize와 같이
+    user-select: none, 끝나면 커서 복구.
+  - 핸들은 position:absolute; left:0; top:0; bottom:0; z-index 패널보다 위.
+
+================================================================
+관련 파일
+================================================================
+frontend/src/components/SourcePanel.jsx
+frontend/src/pages/SpacePage.jsx
+frontend/src/pages/SpaceWorkspace.css
+frontend/src/App.css   (panel / body-text가 잘림에 관여할 때만)
+
+================================================================
+하지 말 것
+================================================================
+- 마인드맵 d3 레이아웃, join API, 멤버 색을 이 단계에서 다시 바꾸지 말 것.
+- 소스 패널을 별도 라우트나 모달로 바꾸지 말 것. 맵 오른쪽 오버레이를 유지.
+- 채팅 API, 새 테이블, 로그인 강제.
+
+================================================================
+완료 기준
+================================================================
+- "카페 대기열 재배치" 원문을 열었을 때 본문 오른쪽 글자가 잘리지 않는다.
+  세로로 길면 스크롤로 끝까지 읽는다.
+- 패널 왼쪽 바를 드래그하면 너비가 변하고, 본문 줄바꿈이 따라간다.
+- 최소/최대 너비 밖으로 줄어들거나 맵을 전부 가리지 않는다.
+- 업로드, 마인드맵 토글, 열 리사이저, 닫기 버튼이 그대로 동작한다.
