@@ -130,7 +130,6 @@ function MainPage() {
 
   const [spaces, setSpaces] = useState([]);
 
-<<<<<<< HEAD
   // 초대받은 스페이스 데이터 소스가 아직 없어서 빈 배열로 시작한다.
   // invitations.length > 0 조건이 있어서 실제 초대가 없으면 섹션 자체가 뜨지 않는다.
   const [invitations, setInvitations] = useState([]);
@@ -142,8 +141,6 @@ function MainPage() {
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (!active) return;
       if (userError || !userData?.user) return;
-
-      setUserId(userData.user.id);
 
       const { data, error } = await supabase
         .from("spaces")
@@ -175,9 +172,6 @@ function MainPage() {
       active = false;
     };
   }, []);
-=======
-  const [invitations, setInvitations] = useState([]);
->>>>>>> 90cf8f96d02e5683e514fad4c320ba40aabce81b
 
   const joinableSpaces = [];
 
