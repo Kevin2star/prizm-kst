@@ -15,6 +15,25 @@ function Signup() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    // 닉네임 확인
+    if (!nickname.trim()) {
+      alert("닉네임을 입력해주세요.");
+      return;
+    }
+
+    // 이메일 확인
+    if (!email.trim()) {
+      alert("이메일을 입력해주세요.");
+      return;
+    }
+
+    // 비밀번호 확인
+    if (!password) {
+      alert("비밀번호를 입력해주세요.");
+      return;
+    }
+
+    // 비밀번호 일치 확인
     if (password !== passwordConfirm) {
       alert("비밀번호가 서로 일치하지 않습니다.");
       return;
@@ -23,43 +42,54 @@ function Signup() {
     setLoading(true);
 
     try {
+      // ==============================
+      // Supabase 실제 회원가입
+      // ==============================
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+        email: email.trim(),
+        password: password,
 
         options: {
           data: {
-            nickname: nickname,
+            nickname: nickname.trim(),
           },
         },
       });
 
+      // 회원가입 실패
       if (error) {
-        console.error("회원가입 오류:", error.message);
+        console.error("회원가입 실패:", error);
+
         alert("회원가입 실패: " + error.message);
+
         setLoading(false);
         return;
       }
 
-      console.log("Supabase 회원가입 성공:", data);
+      console.log("회원가입 성공:", data);
 
-      // MainPage에서 바로 사용할 수 있도록 저장
+      // ==============================
+      // MainPage에서 사용할 정보 저장
+      // ==============================
       sessionStorage.setItem(
         "prizm_test_nickname",
-        nickname
+        nickname.trim()
       );
 
       sessionStorage.setItem(
         "prizm_test_email",
-        email
+        email.trim()
       );
 
       setLoading(false);
 
-      // 가입 성공 후 MainPage
+      // ==============================
+      // 회원가입 성공 → MainPage
+      // ==============================
       navigate("/main");
+
     } catch (error) {
-      console.error("회원가입 오류:", error);
+      console.error("회원가입 중 오류:", error);
 
       alert("회원가입 중 오류가 발생했습니다.");
 
@@ -78,13 +108,15 @@ function Signup() {
         <h1>회원가입</h1>
 
         <p className="auth-description">
-          이메일로 가입하고 새로운 협업을 시작하세요.
+          PRIZM에서 새로운 협업을 시작해보세요.
         </p>
 
         <form
           className="auth-form"
           onSubmit={handleSubmit}
         >
+
+          {/* 닉네임 */}
           <label htmlFor="signup-nickname">
             닉네임
           </label>
@@ -97,9 +129,10 @@ function Signup() {
             onChange={(event) =>
               setNickname(event.target.value)
             }
-            required
+            autoComplete="nickname"
           />
 
+          {/* 이메일 */}
           <label htmlFor="signup-email">
             이메일
           </label>
@@ -112,9 +145,10 @@ function Signup() {
             onChange={(event) =>
               setEmail(event.target.value)
             }
-            required
+            autoComplete="email"
           />
 
+          {/* 비밀번호 */}
           <label htmlFor="signup-password">
             비밀번호
           </label>
@@ -122,37 +156,38 @@ function Signup() {
           <input
             id="signup-password"
             type="password"
-            placeholder="6자 이상 입력하세요"
+            placeholder="비밀번호를 입력하세요"
             value={password}
             onChange={(event) =>
               setPassword(event.target.value)
             }
-            minLength="6"
-            required
+            autoComplete="new-password"
           />
 
-          <label htmlFor="password-confirm">
+          {/* 비밀번호 확인 */}
+          <label htmlFor="signup-password-confirm">
             비밀번호 확인
           </label>
 
           <input
-            id="password-confirm"
+            id="signup-password-confirm"
             type="password"
             placeholder="비밀번호를 다시 입력하세요"
             value={passwordConfirm}
             onChange={(event) =>
               setPasswordConfirm(event.target.value)
             }
-            minLength="6"
-            required
+            autoComplete="new-password"
           />
 
+          {/* 회원가입 버튼 */}
           <button
             type="submit"
             disabled={loading}
           >
             {loading ? "가입 중..." : "회원가입"}
           </button>
+
         </form>
 
         <p className="auth-guide">
