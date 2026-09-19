@@ -1,36 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { api } from "../api";
+import {
+  applySpaceSession,
+  createOwnedSpace,
+  findSpaceMembership,
+  listMySpaces,
+} from "../spaceMembership";
 import { supabase } from "../supabaseClient";
 import "./MainPage.css";
-
-function formatUpdated(isoString) {
-  if (!isoString) return "";
-  const diffMs = Date.now() - new Date(isoString).getTime();
-  const minutes = Math.floor(diffMs / 60000);
-  if (minutes < 1) return "방금 전";
-  if (minutes < 60) return `${minutes}분 전`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}시간 전`;
-  if (hours < 48) return "어제";
-  return new Date(isoString).toLocaleDateString("ko-KR");
-}
-
-function BellIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-      <path d="M10 21h4" />
-    </svg>
-  );
-}
 
 function EditIcon() {
   return (
@@ -107,20 +85,34 @@ function CopyIcon() {
   );
 }
 
+const FAVORITES_KEY = "prizm.spaceFavorites";
+
+function readFavorites() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+    return new Set(Array.isArray(raw) ? raw.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeFavorites(ids) {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify([...ids]));
+}
+
 function MainPage() {
-  // 로그인한 사용자 정보
-  const nickname =
-    sessionStorage.getItem("prizm_test_nickname");
-
-  const email =
-    sessionStorage.getItem("prizm_test_email");
-
-  const initial =
-    nickname?.trim().charAt(0).toUpperCase();
-
+  const navigate = useNavigate();
+  const openingSpaceRef = useRef(false);
+  const [nickname, setNickname] = useState(
+    sessionStorage.getItem("prizm_test_nickname") || ""
+  );
+  const [email, setEmail] = useState(
+    sessionStorage.getItem("prizm_test_email") || ""
+  );
   const [showProfile, setShowProfile] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [joiningSpace, setJoiningSpace] = useState(false);
 
   const [sort, setSort] = useState("최근 수정순");
   const [openSpaceMenu, setOpenSpaceMenu] = useState(null);
@@ -128,6 +120,7 @@ function MainPage() {
   const [editingSpace, setEditingSpace] = useState(null);
   const [editingName, setEditingName] = useState("");
 
+  const [inviteSpace, setInviteSpace] = useState(null);
   const [copiedType, setCopiedType] = useState("");
 
   const [joinCode, setJoinCode] = useState("");
@@ -136,90 +129,149 @@ function MainPage() {
 
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
-  const [draftInviteCode, setDraftInviteCode] = useState("");
-
+  const [inviteEmail, setInviteEmail] = useState("");
   const [spaces, setSpaces] = useState([]);
 
-  // 초대받은 스페이스 데이터 소스가 아직 없어서 빈 배열로 시작한다.
-  // invitations.length > 0 조건이 있어서 실제 초대가 없으면 섹션 자체가 뜨지 않는다.
-  const [invitations, setInvitations] = useState([]);
+  const applyFavorites = (list) => {
+    const favorites = readFavorites();
+    return list.map((space) => ({
+      ...space,
+      favorite: favorites.has(String(space.id)),
+    }));
+  };
+
+  const refreshSpaces = async (user) => {
+    const list = await listMySpaces(user);
+    setSpaces(applyFavorites(list));
+  };
 
   useEffect(() => {
-    let active = true;
+    const getUser = async () => {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser();
 
-    async function loadSpaces() {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (!active) return;
-      if (userError || !userData?.user) return;
-
-      setUserId(userData.user.id);
-
-      const { data, error } = await supabase
-        .from("spaces")
-        .select("id, name, description, join_code, updated_at")
-        .eq("owner_id", userData.user.id)
-        .order("updated_at", { ascending: false });
-
-      if (!active) return;
       if (error) {
-        console.error("스페이스 목록을 불러오지 못했습니다:", error.message);
+        console.error("사용자 정보 불러오기 실패:", error);
+        navigate("/");
         return;
       }
 
-      setSpaces(
-        data.map((space) => ({
-          id: space.id,
-          name: space.name,
-          description: space.description || "새로운 프로젝트 공간",
-          inviteCode: space.join_code,
-          members: [],
-          updated: formatUpdated(space.updated_at),
-          favorite: false,
-        }))
-      );
-    }
+      if (!user) {
+        navigate("/");
+        return;
+      }
 
-    loadSpaces();
-    return () => {
-      active = false;
+      const supabaseNickname = user.user_metadata?.nickname;
+
+      if (supabaseNickname) {
+        setNickname(supabaseNickname);
+        sessionStorage.setItem("prizm_test_nickname", supabaseNickname);
+      }
+
+      if (user.email) {
+        setEmail(user.email);
+        sessionStorage.setItem("prizm_test_email", user.email);
+      }
+
+      try {
+        await refreshSpaces(user);
+      } catch (loadError) {
+        console.error("스페이스 목록 불러오기 실패:", loadError);
+        setSpaces([]);
+      }
     };
-  }, []);
 
-  const joinableSpaces = [];
+    getUser();
+  }, [navigate]);
 
-  const notifications = [
-    {
-      id: 1,
-      title: "새로운 스페이스 초대",
-      text: "김지수님이 디자인 레퍼런스에 초대했어요.",
-      time: "5분 전",
-      unread: true,
-    },
-    {
-      id: 2,
-      title: "새로운 결과물이 추가됐어요",
-      text: "PRIZM 해커톤에 새로운 결과물이 등록됐어요.",
-      time: "1시간 전",
-      unread: true,
-    },
-    {
-      id: 3,
-      title: "스페이스 업데이트",
-      text: "서비스 기획 스페이스가 업데이트됐어요.",
-      time: "어제",
-      unread: false,
-    },
-  ];
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("로그아웃 실패:", error);
+      return;
+    }
+    navigate("/");
+  };
 
   const toggleFavorite = (id) => {
+    const nextFavorites = readFavorites();
+    const key = String(id);
+    if (nextFavorites.has(key)) nextFavorites.delete(key);
+    else nextFavorites.add(key);
+    writeFavorites(nextFavorites);
+
     setSpaces((prev) =>
       prev.map((space) =>
         space.id === id
-          ? { ...space, favorite: !space.favorite }
+          ? { ...space, favorite: nextFavorites.has(String(space.id)) }
           : space
       )
     );
     setOpenSpaceMenu(null);
+  };
+
+  const openSpace = async (space) => {
+    if (openingSpaceRef.current) return;
+
+    openingSpaceRef.current = true;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/");
+        return;
+      }
+
+      let membership =
+        space.memberId != null
+          ? {
+              id: space.memberId,
+              space_id: space.id,
+              nickname: space.memberNickname || nickname,
+            }
+          : await findSpaceMembership(space.id, user);
+
+      if (!membership) {
+        membership = await findSpaceMembership(space.id, user);
+      }
+
+      if (!membership && space.inviteCode) {
+        const { data: spaceRow } = await supabase
+          .from("spaces")
+          .select("id, owner_id, join_code")
+          .eq("id", space.id)
+          .maybeSingle();
+        if (spaceRow?.owner_id === user.id) {
+          const member = await api.joinSpace(spaceRow.join_code || space.inviteCode, {
+            nickname,
+          });
+          membership = {
+            id: member.memberId,
+            space_id: member.spaceId,
+            nickname: member.nickname,
+          };
+        }
+      }
+
+      if (!membership) {
+        alert("이 스페이스의 참여자가 아닙니다.");
+        navigate("/join");
+        return;
+      }
+
+      applySpaceSession(membership, space.inviteCode);
+      navigate(`/spaces/${space.id}`);
+    } catch (err) {
+      console.error("스페이스 입장 실패:", err);
+      alert(err.message || "스페이스로 이동하지 못했습니다.");
+    } finally {
+      window.setTimeout(() => {
+        openingSpaceRef.current = false;
+      }, 800);
+    }
   };
 
   const sortedSpaces = [...spaces].sort((a, b) => {
@@ -231,79 +283,47 @@ function MainPage() {
       return a.name.localeCompare(b.name, "ko");
     }
 
-    return 0;
+    const aTime = new Date(a.updatedAt || 0).getTime();
+    const bTime = new Date(b.updatedAt || 0).getTime();
+    return bTime - aTime;
   });
 
-  const makeInviteCode = () => {
-    const random = Math.random()
-      .toString(36)
-      .substring(2, 6)
-      .toUpperCase();
-
-    return `PRIZM-${random}`;
-  };
-
-  const createSpace = () => {
+  const createSpace = async () => {
     if (!spaceName.trim()) {
       alert("스페이스 이름을 입력해주세요!");
       return;
     }
+    if (creatingSpace) return;
 
-    const newSpace = {
-      id: Date.now(),
-      name: spaceName.trim(),
-      description: spaceDescription.trim() || "새로운 프로젝트 공간",
-      inviteCode: draftInviteCode || makeInviteCode(),
-      members: [{ initial: "R", name: "리즘" }],
-      updated: "방금 전",
-      favorite: false,
-    };
+    setCreatingSpace(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/");
+        return;
+      }
 
-    setSpaces((prev) => [...prev, newSpace]);
+      const space = await createOwnedSpace(user, {
+        name: spaceName.trim(),
+        description: spaceDescription.trim(),
+      });
+      await api.joinSpace(space.join_code, { nickname });
+      await refreshSpaces(user);
 
-    setSpaceName("");
-    setSpaceDescription("");
-    setDraftInviteCode("");
-    setShowModal(false);
-  };
-
-  const joinSpace = (invitation) => {
-    const alreadyJoined = spaces.some(
-      (space) => space.inviteCode === invitation.inviteCode
-    );
-
-    if (alreadyJoined) {
-      setInvitations((prev) =>
-        prev.filter((item) => item.id !== invitation.id)
-      );
-      return;
+      setSpaceName("");
+      setSpaceDescription("");
+      setInviteEmail("");
+      setShowModal(false);
+    } catch (err) {
+      alert(err.message || "스페이스를 만들지 못했습니다.");
+    } finally {
+      setCreatingSpace(false);
     }
-
-    setSpaces((prev) => [
-      ...prev,
-      {
-        id: invitation.id,
-        name: invitation.name,
-        description: invitation.description,
-        inviteCode: invitation.inviteCode,
-        members: invitation.members,
-        updated: "방금 전",
-        favorite: false,
-      },
-    ]);
-
-    setInvitations((prev) =>
-      prev.filter((item) => item.id !== invitation.id)
-    );
   };
 
-  const declineInvitation = (id) => {
-    setInvitations((prev) =>
-      prev.filter((item) => item.id !== id)
-    );
-  };
-
-  const joinByCode = () => {
+  const joinByCode = async () => {
     const normalizedCode = joinCode.trim().toUpperCase();
 
     if (!normalizedCode) {
@@ -314,8 +334,7 @@ function MainPage() {
 
     if (
       spaces.some(
-        (space) =>
-          space.inviteCode.toUpperCase() === normalizedCode
+        (space) => space.inviteCode?.toUpperCase() === normalizedCode
       )
     ) {
       setJoinStatus("error");
@@ -323,41 +342,30 @@ function MainPage() {
       return;
     }
 
-    const invitationTarget = invitations.find(
-      (invitation) =>
-        invitation.inviteCode.toUpperCase() === normalizedCode
-    );
+    if (joiningSpace) return;
+    setJoiningSpace(true);
 
-    if (invitationTarget) {
-      joinSpace(invitationTarget);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/");
+        return;
+      }
+
+      const member = await api.joinSpace(normalizedCode, { nickname });
+      await refreshSpaces(user);
       setJoinStatus("success");
-      setJoinMessage(`${invitationTarget.name}에 참여했어요!`);
+      setJoinMessage("스페이스에 참여했어요!");
       setJoinCode("");
-      return;
-    }
-
-    const targetSpace = joinableSpaces.find(
-      (space) =>
-        space.inviteCode.toUpperCase() === normalizedCode
-    );
-
-    if (!targetSpace) {
+      return member;
+    } catch (err) {
       setJoinStatus("error");
-      setJoinMessage("유효하지 않은 참여 코드예요.");
-      return;
+      setJoinMessage(err.message || "유효하지 않은 참여 코드예요.");
+    } finally {
+      setJoiningSpace(false);
     }
-
-    setSpaces((prev) => [
-      ...prev,
-      {
-        ...targetSpace,
-        updated: "방금 전",
-      },
-    ]);
-
-    setJoinStatus("success");
-    setJoinMessage(`${targetSpace.name}에 참여했어요!`);
-    setJoinCode("");
   };
 
   const toggleSpaceMenu = (id) => {
@@ -408,8 +416,14 @@ function MainPage() {
     setOpenSpaceMenu(null);
   };
 
-  const getInviteLink = (code) => {
-    return `${window.location.origin}/join/${code}`;
+  const openInviteModal = (space) => {
+    setInviteSpace(space);
+    setOpenSpaceMenu(null);
+    setCopiedType("");
+  };
+
+  const getInviteLink = (space) => {
+    return `${window.location.origin}/join/${space.inviteCode}`;
   };
 
   const copyText = async (text, type) => {
@@ -430,7 +444,6 @@ function MainPage() {
       className="app"
       onClick={() => {
         setOpenSpaceMenu(null);
-        setShowNotifications(false);
         setShowProfile(false);
       }}
     >
@@ -448,56 +461,6 @@ function MainPage() {
 
         <div className="header-right">
           <div
-            className="notification-wrapper"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="notification-button"
-              aria-label="알림"
-              onClick={() => {
-                setShowNotifications((prev) => !prev);
-                setShowProfile(false);
-                setOpenSpaceMenu(null);
-              }}
-            >
-              <BellIcon />
-              <span className="notification-dot" />
-            </button>
-
-            {showNotifications && (
-              <div className="notification-menu">
-                <div className="notification-header">
-                  <h3>알림</h3>
-                  <span>최근 알림</span>
-                </div>
-
-                <div className="notification-list">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`notification-item ${
-                        notification.unread ? "unread" : ""
-                      }`}
-                    >
-                      {notification.unread && (
-                        <span className="unread-dot" />
-                      )}
-
-                      <div className="notification-content">
-                        <strong>{notification.title}</strong>
-                        <p>{notification.text}</p>
-                        <span className="notification-time">
-                          {notification.time}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div
             className="profile-wrapper"
             onClick={(e) => e.stopPropagation()}
           >
@@ -505,12 +468,13 @@ function MainPage() {
               className="profile"
               onClick={() => {
                 setShowProfile((prev) => !prev);
-                setShowNotifications(false);
                 setOpenSpaceMenu(null);
               }}
             >
-              <div className="profile-circle">R</div>
-              <span className="profile-name">리즘</span>
+              <div className="profile-circle">
+                {nickname.charAt(0).toUpperCase()}
+              </div>
+              <span className="profile-name">{nickname}</span>
               <span className="profile-arrow">▾</span>
             </button>
 
@@ -518,12 +482,12 @@ function MainPage() {
               <div className="profile-menu">
                 <div className="profile-menu-user">
                   <div className="profile-circle large">
-                    R
+                    {nickname.charAt(0).toUpperCase()}
                   </div>
 
                   <div className="profile-menu-text">
-                    <strong>리즘</strong>
-                    <p>rism@prizm.com</p>
+                    <strong>{nickname}</strong>
+                    <p>{email}</p>
                   </div>
                 </div>
 
@@ -535,7 +499,7 @@ function MainPage() {
 
                 <div className="divider" />
 
-                <button className="menu-item logout">
+                <button className="menu-item logout" onClick={handleLogout}>
                   로그아웃
                 </button>
               </div>
@@ -547,7 +511,7 @@ function MainPage() {
       <main className="main">
         <section className="welcome">
           <h1>
-            안녕하세요, 리즘님! <span>👋</span>
+            안녕하세요, {nickname}님! <span>👋</span>
           </h1>
           <p>
             오늘도 좋은 아이디어가 멋진 프로젝트로 이어지길 바라요.
@@ -575,11 +539,21 @@ function MainPage() {
           </div>
 
           {/* 스페이스 카드 */}
-          <div className="space-grid">
+          <div className="main-space-grid">
             {sortedSpaces.map((space) => (
               <div
                 className="space-card"
                 key={space.id}
+                role="link"
+                tabIndex={0}
+                aria-label={`${space.name} 스페이스 열기`}
+                onClick={() => openSpace(space)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openSpace(space);
+                  }
+                }}
               >
                 <div className="card-top">
                   <span className="space-label">
@@ -608,7 +582,6 @@ function MainPage() {
                         onClick={() => {
                           toggleSpaceMenu(space.id);
                           setShowProfile(false);
-                          setShowNotifications(false);
                         }}
                       >
                         •••
@@ -622,6 +595,16 @@ function MainPage() {
                           >
                             <EditIcon />
                             <span>이름 변경</span>
+                          </button>
+
+                          <button
+                            className="space-menu-item"
+                            onClick={() =>
+                              openInviteModal(space)
+                            }
+                          >
+                            <LinkIcon />
+                            <span>초대하기</span>
                           </button>
 
                           <div className="space-menu-divider" />
@@ -646,7 +629,7 @@ function MainPage() {
 
                 <div className="card-bottom">
                   <div className="members">
-                    {space.members.map((member, index) => (
+                    {(space.members || []).map((member, index) => (
                       <div
                         className="member-wrapper"
                         key={`${space.id}-${index}`}
@@ -673,10 +656,8 @@ function MainPage() {
               className="space-card create-card"
               onClick={(e) => {
                 e.stopPropagation();
-                setDraftInviteCode(makeInviteCode());
                 setShowModal(true);
                 setShowProfile(false);
-                setShowNotifications(false);
                 setOpenSpaceMenu(null);
               }}
             >
@@ -716,7 +697,7 @@ function MainPage() {
                   placeholder="참여 코드를 입력하세요"
                 />
 
-                <button onClick={joinByCode}>
+                <button onClick={joinByCode} disabled={joiningSpace}>
                   참여하기
                 </button>
               </div>
@@ -731,66 +712,6 @@ function MainPage() {
             )}
           </div>
         </section>
-
-        {/* 초대받은 스페이스 */}
-        {invitations.length > 0 && (
-          <section className="invitation-section">
-            <div className="section-title invitation-title">
-              <h2>초대받은 스페이스</h2>
-              <span className="space-count">
-                {invitations.length}
-              </span>
-            </div>
-
-            <div className="invitation-list">
-              {invitations.map((invitation) => (
-                <div
-                  className="invitation-card"
-                  key={invitation.id}
-                >
-                  <div className="invitation-info">
-                    <span className="space-label">
-                      SPACE
-                    </span>
-
-                    <h3>{invitation.name}</h3>
-                    <p>{invitation.description}</p>
-
-                    <div className="inviter">
-                      <span className="inviter-avatar">
-                        {invitation.inviter.charAt(0)}
-                      </span>
-
-                      <span>
-                        {invitation.inviter}님이 초대했어요.
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="invite-buttons">
-                    <button
-                      className="decline"
-                      onClick={() =>
-                        declineInvitation(invitation.id)
-                      }
-                    >
-                      거절
-                    </button>
-
-                    <button
-                      className="join"
-                      onClick={() =>
-                        joinSpace(invitation)
-                      }
-                    >
-                      참여하기
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
       </main>
 
       {/* 새 스페이스 */}
@@ -838,49 +759,14 @@ function MainPage() {
               placeholder="프로젝트를 간단하게 설명해주세요."
             />
 
-            <div className="share-list">
-              <div className="share-row">
-                <div className="share-info">
-                  <span className="share-label">초대 링크</span>
-                  <span className="share-value">
-                    {draftInviteCode ? getInviteLink(draftInviteCode) : ""}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  className="share-copy-button"
-                  onClick={() =>
-                    copyText(getInviteLink(draftInviteCode), "link")
-                  }
-                  disabled={!draftInviteCode}
-                >
-                  <CopyIcon />
-                  {copiedType === "link" ? "복사됨" : "복사"}
-                </button>
-              </div>
-
-              <div className="share-row">
-                <div className="share-info">
-                  <span className="share-label">참여 코드</span>
-                  <span className="share-value code-value">
-                    {draftInviteCode}
-                  </span>
-                </div>
-
-                <button
-                  type="button"
-                  className="share-copy-button"
-                  onClick={() =>
-                    copyText(draftInviteCode, "code")
-                  }
-                  disabled={!draftInviteCode}
-                >
-                  <CopyIcon />
-                  {copiedType === "code" ? "복사됨" : "복사"}
-                </button>
-              </div>
-            </div>
+            <label>팀원 이메일 초대</label>
+            <input
+              value={inviteEmail}
+              onChange={(e) =>
+                setInviteEmail(e.target.value)
+              }
+              placeholder="team@example.com"
+            />
 
             <div className="modal-buttons">
               <button
@@ -892,6 +778,7 @@ function MainPage() {
 
               <button
                 className="create-button"
+                disabled={creatingSpace}
                 onClick={createSpace}
               >
                 만들기
@@ -959,6 +846,88 @@ function MainPage() {
         </div>
       )}
 
+      {/* 초대 */}
+      {inviteSpace && (
+        <div
+          className="modal-background"
+          onClick={() => setInviteSpace(null)}
+        >
+          <div
+            className="invite-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="invite-modal-header">
+              <div>
+                <h2>스페이스 초대</h2>
+                <span>{inviteSpace.name}</span>
+              </div>
+
+              <button
+                className="close-button"
+                onClick={() => setInviteSpace(null)}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="share-list">
+              <div className="share-row">
+                <div className="share-info">
+                  <span className="share-label">
+                    초대 링크
+                  </span>
+
+                  <span className="share-value">
+                    {getInviteLink(inviteSpace)}
+                  </span>
+                </div>
+
+                <button
+                  className="share-copy-button"
+                  onClick={() =>
+                    copyText(
+                      getInviteLink(inviteSpace),
+                      "link"
+                    )
+                  }
+                >
+                  <CopyIcon />
+                  {copiedType === "link"
+                    ? "복사됨"
+                    : "복사"}
+                </button>
+              </div>
+
+              <div className="share-row">
+                <div className="share-info">
+                  <span className="share-label">
+                    참여 코드
+                  </span>
+
+                  <span className="share-value code-value">
+                    {inviteSpace.inviteCode}
+                  </span>
+                </div>
+
+                <button
+                  className="share-copy-button"
+                  onClick={() =>
+                    copyText(
+                      inviteSpace.inviteCode,
+                      "code"
+                    )
+                  }
+                >
+                  <CopyIcon />
+                  {copiedType === "code"
+                    ? "복사됨"
+                    : "복사"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

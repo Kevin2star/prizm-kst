@@ -7,7 +7,9 @@ import MindmapCanvas from '../components/MindmapCanvas'
 import MindmapTree, { collectMajors, colorForMajor, identityKey, memberColorMap } from '../components/MindmapTree'
 import SourcePanel from '../components/SourcePanel'
 import { connectSpaceRealtime } from '../realtime'
+import { applySpaceSession, findSpaceMembership, getAccountMember } from '../spaceMembership'
 import { loadSession, sessionMatchesSpace } from '../session'
+import { supabase } from '../supabaseClient'
 import './SpaceWorkspace.css'
 
 const SIDEBAR_PX = 72
@@ -61,7 +63,7 @@ function startResize(event, workspace, leftCol, rightCol, rightMin) {
 export default function SpacePage() {
   const { spaceId } = useParams()
   const navigate = useNavigate()
-  const session = loadSession()
+  const [session, setSession] = useState(() => loadSession())
   const [space, setSpace] = useState(null)
   const [graph, setGraph] = useState(null)
   const [artifacts, setArtifacts] = useState([])
@@ -93,8 +95,59 @@ export default function SpacePage() {
   const aiScrollRef = useRef(null)
 
   useEffect(() => {
-    if (!sessionMatchesSpace(spaceId)) {
-      navigate('/join')
+    let cancelled = false
+
+    async function ensureMembership() {
+      if (sessionMatchesSpace(spaceId)) return
+
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (!user) {
+          if (!cancelled) navigate('/join')
+          return
+        }
+
+        const membership = await findSpaceMembership(spaceId, user)
+        if (membership) {
+          applySpaceSession(membership)
+          if (!cancelled) setSession(loadSession())
+          return
+        }
+
+        const { data: spaceRow } = await supabase
+          .from('spaces')
+          .select('id, owner_id, join_code')
+          .eq('id', spaceId)
+          .maybeSingle()
+        if (spaceRow?.owner_id === user.id && spaceRow.join_code) {
+          const account = await getAccountMember(user.id)
+          const nickname = account?.nickname || user.user_metadata?.nickname
+          if (nickname) {
+            const member = await api.joinSpace(spaceRow.join_code, { nickname })
+            applySpaceSession(
+              {
+                id: member.memberId,
+                space_id: member.spaceId,
+                nickname: member.nickname,
+              },
+              spaceRow.join_code,
+            )
+            if (!cancelled) setSession(loadSession())
+            return
+          }
+        }
+      } catch {
+        // keep the join gate below
+      }
+
+      if (!cancelled) navigate('/join')
+    }
+
+    ensureMembership()
+    return () => {
+      cancelled = true
     }
   }, [spaceId, navigate])
 
