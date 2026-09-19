@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { validateEmail, validatePassword } from "../auth";
 import "./Home.css";
 
 function Home(){
@@ -14,22 +13,10 @@ function Home(){
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-
-    const emailCheck = validateEmail(email);
-    const passwordCheck = validatePassword(password);
-    if (!emailCheck.ok) {
-      alert(emailCheck.message);
-      return;
-    }
-    if (!passwordCheck.ok) {
-      alert(passwordCheck.message);
-      return;
-    }
-
     setLoading(true);
 
     const { error } = await supabase.auth.signInWithPassword({
-      email: emailCheck.email,
+      email,
       password,
     });
 
@@ -145,7 +132,6 @@ function Home(){
                   placeholder="이메일을 입력하세요"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  autoComplete="email"
                   required
                 />
               </div>
@@ -160,7 +146,6 @@ function Home(){
                   placeholder="비밀번호를 입력하세요"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
-                  autoComplete="current-password"
                   required
                 />
 
@@ -186,10 +171,6 @@ function Home(){
             <div className="login-divider">
               <span>또는</span>
             </div>
-
-            <Link to="/join" className="join-code-button">
-              참여 코드로 바로 입장
-            </Link>
 
             <p className="signup-guide">
               아직 계정이 없나요?
