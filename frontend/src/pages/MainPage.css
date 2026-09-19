@@ -554,6 +554,8 @@ button {
 
   box-shadow: 0 6px 22px rgba(34, 31, 70, 0.035);
 
+  cursor: pointer;
+
   transition:
     transform 0.2s ease,
     border-color 0.2s ease,
@@ -566,6 +568,11 @@ button {
   border-color: #d7d4ff;
 
   box-shadow: 0 13px 35px rgba(55, 48, 120, 0.08);
+}
+
+.space-card:focus-visible {
+  outline: 2px solid #675dff;
+  outline-offset: 3px;
 }
 
 .card-top {
@@ -829,6 +836,11 @@ button {
   color: #655cff;
 
   text-align: center;
+}
+
+.create-card:focus-visible {
+  outline: 2px solid #675dff;
+  outline-offset: 3px;
 }
 
 .create-card:hover {

@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "../api";
+import {
+  applySpaceSession,
+  createOwnedSpace,
+  findSpaceMembership,
+  listMySpaces,
+} from "../spaceMembership";
 import { supabase } from "../supabaseClient";
 import "./MainPage.css";
 
@@ -96,8 +103,24 @@ function CopyIcon() {
   );
 }
 
+const FAVORITES_KEY = "prizm.spaceFavorites";
+
+function readFavorites() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+    return new Set(Array.isArray(raw) ? raw.map(String) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeFavorites(ids) {
+  localStorage.setItem(FAVORITES_KEY, JSON.stringify([...ids]));
+}
+
 function MainPage() {
   const navigate = useNavigate();
+  const openingSpaceRef = useRef(false);
   const [nickname, setNickname] = useState(
     sessionStorage.getItem("prizm_test_nickname") || ""
   );
@@ -107,6 +130,8 @@ function MainPage() {
   const [showProfile, setShowProfile] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [creatingSpace, setCreatingSpace] = useState(false);
+  const [joiningSpace, setJoiningSpace] = useState(false);
 
   const [sort, setSort] = useState("최근 수정순");
   const [openSpaceMenu, setOpenSpaceMenu] = useState(null);
@@ -124,6 +149,20 @@ function MainPage() {
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [spaces, setSpaces] = useState([]);
+
+  const applyFavorites = (list) => {
+    const favorites = readFavorites();
+    return list.map((space) => ({
+      ...space,
+      favorite: favorites.has(String(space.id)),
+    }));
+  };
+
+  const refreshSpaces = async (user) => {
+    const list = await listMySpaces(user);
+    setSpaces(applyFavorites(list));
+  };
 
   useEffect(() => {
     const getUser = async () => {
@@ -134,26 +173,37 @@ function MainPage() {
 
       if (error) {
         console.error("사용자 정보 불러오기 실패:", error);
+        navigate("/");
         return;
       }
 
-      if (user) {
-        const supabaseNickname = user.user_metadata?.nickname;
+      if (!user) {
+        navigate("/");
+        return;
+      }
 
-        if (supabaseNickname) {
-          setNickname(supabaseNickname);
-          sessionStorage.setItem("prizm_test_nickname", supabaseNickname);
-        }
+      const supabaseNickname = user.user_metadata?.nickname;
 
-        if (user.email) {
-          setEmail(user.email);
-          sessionStorage.setItem("prizm_test_email", user.email);
-        }
+      if (supabaseNickname) {
+        setNickname(supabaseNickname);
+        sessionStorage.setItem("prizm_test_nickname", supabaseNickname);
+      }
+
+      if (user.email) {
+        setEmail(user.email);
+        sessionStorage.setItem("prizm_test_email", user.email);
+      }
+
+      try {
+        await refreshSpaces(user);
+      } catch (loadError) {
+        console.error("스페이스 목록 불러오기 실패:", loadError);
+        setSpaces([]);
       }
     };
 
     getUser();
-  }, []);
+  }, [navigate]);
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -163,43 +213,6 @@ function MainPage() {
     }
     navigate("/");
   };
-
-  const [spaces, setSpaces] = useState([
-    {
-      id: 1,
-      name: "PRIZM 해커톤",
-      description: "AI 기반 팀 협업 프로젝트",
-      inviteCode: "PRIZM-8K2F",
-      members: [
-        { initial: "R", name: "리즘" },
-        { initial: "S", name: "수민" },
-        { initial: "J", name: "지수" },
-      ],
-      updated: "2시간 전",
-      favorite: true,
-    },
-    {
-      id: 2,
-      name: "서비스 기획",
-      description: "팀 아이디어를 정리하는 공간",
-      inviteCode: "PLAN-5M9Q",
-      members: [
-        { initial: "R", name: "리즘" },
-        { initial: "M", name: "민지" },
-      ],
-      updated: "어제",
-      favorite: false,
-    },
-    {
-      id: 3,
-      name: "개인 작업실",
-      description: "나만의 생각과 기록",
-      inviteCode: "RISM-3P7X",
-      members: [{ initial: "R", name: "리즘" }],
-      updated: "3일 전",
-      favorite: false,
-    },
-  ]);
 
   const [invitations, setInvitations] = useState([
     {
@@ -214,34 +227,6 @@ function MainPage() {
       ],
     },
   ]);
-
-  const joinableSpaces = [
-    {
-      id: 201,
-      name: "디자인 시스템 구축",
-      description: "팀 디자인 시스템과 UI 가이드를 정리하는 공간",
-      inviteCode: "DESIGN-24A7",
-      members: [
-        { initial: "H", name: "하린" },
-        { initial: "D", name: "도윤" },
-        { initial: "R", name: "리즘" },
-      ],
-      updated: "방금 전",
-      favorite: false,
-    },
-    {
-      id: 202,
-      name: "AI 아이디어 랩",
-      description: "AI 서비스 아이디어를 함께 발전시키는 공간",
-      inviteCode: "AI-7LAB",
-      members: [
-        { initial: "J", name: "지훈" },
-        { initial: "R", name: "리즘" },
-      ],
-      updated: "방금 전",
-      favorite: false,
-    },
-  ];
 
   const notifications = [
     {
@@ -268,14 +253,86 @@ function MainPage() {
   ];
 
   const toggleFavorite = (id) => {
+    const nextFavorites = readFavorites();
+    const key = String(id);
+    if (nextFavorites.has(key)) nextFavorites.delete(key);
+    else nextFavorites.add(key);
+    writeFavorites(nextFavorites);
+
     setSpaces((prev) =>
       prev.map((space) =>
         space.id === id
-          ? { ...space, favorite: !space.favorite }
+          ? { ...space, favorite: nextFavorites.has(String(space.id)) }
           : space
       )
     );
     setOpenSpaceMenu(null);
+  };
+
+  const openSpace = async (space) => {
+    if (openingSpaceRef.current) return;
+    if (space.isPreview) {
+      alert("미리보기 데이터라 실제 워크스페이스로 이동하지 않습니다.");
+      return;
+    }
+
+    openingSpaceRef.current = true;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/");
+        return;
+      }
+
+      let membership =
+        space.memberId != null
+          ? {
+              id: space.memberId,
+              space_id: space.id,
+              nickname: space.memberNickname || nickname,
+            }
+          : await findSpaceMembership(space.id, user);
+
+      if (!membership) {
+        membership = await findSpaceMembership(space.id, user);
+      }
+
+      if (!membership && space.inviteCode) {
+        const { data: spaceRow } = await supabase
+          .from("spaces")
+          .select("id, owner_id, join_code")
+          .eq("id", space.id)
+          .maybeSingle();
+        if (spaceRow?.owner_id === user.id) {
+          const member = await api.joinSpace(spaceRow.join_code || space.inviteCode, {
+            nickname,
+          });
+          membership = {
+            id: member.memberId,
+            space_id: member.spaceId,
+            nickname: member.nickname,
+          };
+        }
+      }
+
+      if (!membership) {
+        alert("이 스페이스의 참여자가 아닙니다.");
+        navigate("/join");
+        return;
+      }
+
+      applySpaceSession(membership, space.inviteCode);
+      navigate(`/spaces/${space.id}`);
+    } catch (err) {
+      console.error("스페이스 입장 실패:", err);
+      alert(err.message || "스페이스로 이동하지 못했습니다.");
+    } finally {
+      window.setTimeout(() => {
+        openingSpaceRef.current = false;
+      }, 800);
+    }
   };
 
   const sortedSpaces = [...spaces].sort((a, b) => {
@@ -287,40 +344,44 @@ function MainPage() {
       return a.name.localeCompare(b.name, "ko");
     }
 
-    return 0;
+    const aTime = new Date(a.updatedAt || 0).getTime();
+    const bTime = new Date(b.updatedAt || 0).getTime();
+    return bTime - aTime;
   });
 
-  const makeInviteCode = () => {
-    const random = Math.random()
-      .toString(36)
-      .substring(2, 6)
-      .toUpperCase();
-
-    return `PRIZM-${random}`;
-  };
-
-  const createSpace = () => {
+  const createSpace = async () => {
     if (!spaceName.trim()) {
       alert("스페이스 이름을 입력해주세요!");
       return;
     }
+    if (creatingSpace) return;
 
-    const newSpace = {
-      id: Date.now(),
-      name: spaceName.trim(),
-      description: spaceDescription.trim() || "새로운 프로젝트 공간",
-      inviteCode: makeInviteCode(),
-      members: [{ initial: nickname.charAt(0).toUpperCase(), name: nickname }],
-      updated: "방금 전",
-      favorite: false,
-    };
+    setCreatingSpace(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/");
+        return;
+      }
 
-    setSpaces((prev) => [...prev, newSpace]);
+      const space = await createOwnedSpace(user, {
+        name: spaceName.trim(),
+        description: spaceDescription.trim(),
+      });
+      await api.joinSpace(space.join_code, { nickname });
+      await refreshSpaces(user);
 
-    setSpaceName("");
-    setSpaceDescription("");
-    setInviteEmail("");
-    setShowModal(false);
+      setSpaceName("");
+      setSpaceDescription("");
+      setInviteEmail("");
+      setShowModal(false);
+    } catch (err) {
+      alert(err.message || "스페이스를 만들지 못했습니다.");
+    } finally {
+      setCreatingSpace(false);
+    }
   };
 
   const joinSpace = (invitation) => {
@@ -345,6 +406,7 @@ function MainPage() {
         members: invitation.members,
         updated: "방금 전",
         favorite: false,
+        isPreview: true,
       },
     ]);
 
@@ -359,7 +421,7 @@ function MainPage() {
     );
   };
 
-  const joinByCode = () => {
+  const joinByCode = async () => {
     const normalizedCode = joinCode.trim().toUpperCase();
 
     if (!normalizedCode) {
@@ -371,7 +433,8 @@ function MainPage() {
     if (
       spaces.some(
         (space) =>
-          space.inviteCode.toUpperCase() === normalizedCode
+          !space.isPreview &&
+          space.inviteCode?.toUpperCase() === normalizedCode
       )
     ) {
       setJoinStatus("error");
@@ -379,41 +442,35 @@ function MainPage() {
       return;
     }
 
-    const invitationTarget = invitations.find(
-      (invitation) =>
-        invitation.inviteCode.toUpperCase() === normalizedCode
-    );
+    if (joiningSpace) return;
+    setJoiningSpace(true);
 
-    if (invitationTarget) {
-      joinSpace(invitationTarget);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/");
+        return;
+      }
+
+      const member = await api.joinSpace(normalizedCode, { nickname });
+      await refreshSpaces(user);
       setJoinStatus("success");
-      setJoinMessage(`${invitationTarget.name}에 참여했어요!`);
+      setJoinMessage("스페이스에 참여했어요!");
       setJoinCode("");
-      return;
-    }
-
-    const targetSpace = joinableSpaces.find(
-      (space) =>
-        space.inviteCode.toUpperCase() === normalizedCode
-    );
-
-    if (!targetSpace) {
+      setInvitations((prev) =>
+        prev.filter(
+          (item) => item.inviteCode.toUpperCase() !== normalizedCode
+        )
+      );
+      return member;
+    } catch (err) {
       setJoinStatus("error");
-      setJoinMessage("유효하지 않은 참여 코드예요.");
-      return;
+      setJoinMessage(err.message || "유효하지 않은 참여 코드예요.");
+    } finally {
+      setJoiningSpace(false);
     }
-
-    setSpaces((prev) => [
-      ...prev,
-      {
-        ...targetSpace,
-        updated: "방금 전",
-      },
-    ]);
-
-    setJoinStatus("success");
-    setJoinMessage(`${targetSpace.name}에 참여했어요!`);
-    setJoinCode("");
   };
 
   const toggleSpaceMenu = (id) => {
@@ -644,6 +701,16 @@ function MainPage() {
               <div
                 className="space-card"
                 key={space.id}
+                role="link"
+                tabIndex={0}
+                aria-label={`${space.name} 스페이스 열기`}
+                onClick={() => openSpace(space)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openSpace(space);
+                  }
+                }}
               >
                 <div className="card-top">
                   <span className="space-label">
@@ -720,7 +787,7 @@ function MainPage() {
 
                 <div className="card-bottom">
                   <div className="members">
-                    {space.members.map((member, index) => (
+                    {(space.members || []).map((member, index) => (
                       <div
                         className="member-wrapper"
                         key={`${space.id}-${index}`}
@@ -789,7 +856,7 @@ function MainPage() {
                   placeholder="참여 코드를 입력하세요"
                 />
 
-                <button onClick={joinByCode}>
+                <button onClick={joinByCode} disabled={joiningSpace}>
                   참여하기
                 </button>
               </div>
@@ -930,6 +997,7 @@ function MainPage() {
 
               <button
                 className="create-button"
+                disabled={creatingSpace}
                 onClick={createSpace}
               >
                 만들기
