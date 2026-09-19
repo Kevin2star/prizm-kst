@@ -1307,6 +1307,10 @@ button {
   background: #554bec;
 }
 
+.modal .share-list {
+  margin: 4px 0 8px;
+}
+
 /* INVITE MODAL */
 
 .invite-modal {

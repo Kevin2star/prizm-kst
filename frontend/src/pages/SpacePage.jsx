@@ -7,12 +7,19 @@ import MindmapCanvas from '../components/MindmapCanvas'
 import MindmapTree, { collectMajors, colorForMajor, identityKey, memberColorMap } from '../components/MindmapTree'
 import SourcePanel from '../components/SourcePanel'
 import { connectSpaceRealtime } from '../realtime'
-import { applySpaceSession, findSpaceMembership, getAccountMember } from '../spaceMembership'
-import { loadSession, sessionMatchesSpace } from '../session'
+import { applySpaceSession, findSpaceMembership, joinSpaceByCode } from '../spaceMembership'
+import { clearSession, loadSession, sessionMatchesSpace } from '../session'
 import { supabase } from '../supabaseClient'
 import './SpaceWorkspace.css'
 
-const SIDEBAR_PX = 72
+function isMissingSpace(err) {
+  const code = err?.code || ''
+  const message = err?.message || ''
+  return (
+    code === 'SPACE_NOT_FOUND' ||
+    /스페이스를 찾을 수 없습니다|참여 코드를 찾을 수 없습니다/.test(message)
+  )
+}
 
 function shortName(name) {
   const value = String(name || '?')
@@ -121,22 +128,23 @@ export default function SpacePage() {
           .select('id, owner_id, join_code')
           .eq('id', spaceId)
           .maybeSingle()
-        if (spaceRow?.owner_id === user.id && spaceRow.join_code) {
-          const account = await getAccountMember(user.id)
-          const nickname = account?.nickname || user.user_metadata?.nickname
-          if (nickname) {
-            const member = await api.joinSpace(spaceRow.join_code, { nickname })
-            applySpaceSession(
-              {
-                id: member.memberId,
-                space_id: member.spaceId,
-                nickname: member.nickname,
-              },
-              spaceRow.join_code,
-            )
-            if (!cancelled) setSession(loadSession())
-            return
-          }
+        if (!spaceRow) {
+          clearSession()
+          if (!cancelled) navigate('/main', { replace: true })
+          return
+        }
+        if (spaceRow.owner_id === user.id && spaceRow.join_code) {
+          const member = await joinSpaceByCode(spaceRow.join_code)
+          applySpaceSession(
+            {
+              id: member.id,
+              space_id: member.space_id,
+              nickname: member.nickname,
+            },
+            spaceRow.join_code,
+          )
+          if (!cancelled) setSession(loadSession())
+          return
         }
       } catch {
         // keep the join gate below
@@ -173,7 +181,14 @@ export default function SpacePage() {
 
   useEffect(() => {
     setMapFailed(false)
-    refresh().catch((err) => setError(err.message))
+    refresh().catch((err) => {
+      if (isMissingSpace(err)) {
+        clearSession()
+        navigate('/main', { replace: true })
+        return
+      }
+      setError(err.message)
+    })
     const stop = connectSpaceRealtime(spaceId, () => {
       refresh().catch(() => {})
     })

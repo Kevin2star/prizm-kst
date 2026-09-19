@@ -1,21 +1,21 @@
-import { createClient } from '@supabase/supabase-js'
+import { supabase } from './supabaseClient'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 const functionsBase = supabaseUrl ? `${supabaseUrl}/functions/v1/prizm-api` : ''
 
-export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null
+export { supabase }
 
 async function request(path, options = {}) {
   if (!functionsBase || !supabaseAnonKey) {
     throw new Error('VITE_SUPABASE_URL과 VITE_SUPABASE_ANON_KEY를 설정하세요.')
   }
+  const { data: sessionData } = await supabase.auth.getSession()
+  const token = sessionData.session?.access_token || supabaseAnonKey
   const response = await fetch(`${functionsBase}${path}`, {
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${supabaseAnonKey}`,
+      Authorization: `Bearer ${token}`,
       apikey: supabaseAnonKey,
       ...(options.headers || {}),
     },

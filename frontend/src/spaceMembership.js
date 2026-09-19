@@ -1,6 +1,54 @@
 import { supabase } from "./supabaseClient";
 import { saveSession } from "./session";
 
+function mapMembershipRpcError(error) {
+  const text = `${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`;
+  if (/AUTH_REQUIRED|not authenticated/i.test(text)) {
+    throw new Error("로그인이 필요합니다.");
+  }
+  if (/NOT_SPACE_MEMBER/i.test(text)) {
+    throw new Error("이 스페이스의 참여자가 아닙니다.");
+  }
+  if (/찾을 수 없습니다/.test(text) || /P0002/.test(text)) {
+    throw new Error("참여 코드를 찾을 수 없습니다.");
+  }
+  throw new Error(error?.message || "스페이스에 참여하지 못했습니다.");
+}
+
+export async function joinSpaceByCode(code) {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized) throw new Error("참여 코드를 입력해주세요.");
+  const { data, error } = await supabase.rpc("join_space_by_code", {
+    p_code: normalized,
+  });
+  if (error) mapMembershipRpcError(error);
+  return data;
+}
+
+export async function ensureCurrentSpaceMember(spaceId) {
+  const { data, error } = await supabase.rpc("ensure_space_member", {
+    p_space_id: spaceId,
+  });
+  if (error) mapMembershipRpcError(error);
+  return data;
+}
+
+export async function deleteOwnedSpace(space, user) {
+  if (!user?.id) throw new Error("로그인이 필요합니다.");
+  if (space.ownerId && space.ownerId !== user.id) {
+    throw new Error("스페이스 소유자만 삭제할 수 있습니다.");
+  }
+  const { error } = await supabase.rpc("delete_owned_space", {
+    p_space_id: space.id,
+  });
+  if (error) {
+    if (/소유자|42501|AUTH_REQUIRED/i.test(`${error.message} ${error.details || ""}`)) {
+      throw new Error("스페이스를 삭제하지 못했습니다. 소유자만 삭제할 수 있습니다.");
+    }
+    throw new Error(error.message || "스페이스를 삭제하지 못했습니다.");
+  }
+}
+
 export function formatRelativeTime(iso) {
   if (!iso) return "";
   const then = new Date(iso).getTime();
