@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import { validateEmail, validateNickname, validatePassword } from "../auth";
 import "./SignUp.css";
 
 function Signup() {
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [loading, setLoading] = useState(false);
@@ -16,22 +15,7 @@ function Signup() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const emailCheck = validateEmail(email);
-    const nicknameCheck = validateNickname(nickname);
-    const passwordCheck = validatePassword(password);
-
-    if (!emailCheck.ok) {
-      alert(emailCheck.message);
-      return;
-    }
-    if (!nicknameCheck.ok) {
-      alert(nicknameCheck.message);
-      return;
-    }
-    if (!passwordCheck.ok) {
-      alert(passwordCheck.message);
-      return;
-    }
+    // 비밀번호가 서로 다른 경우만 막기
     if (password !== passwordConfirm) {
       alert("비밀번호가 서로 일치하지 않습니다.");
       return;
@@ -39,23 +23,35 @@ function Signup() {
 
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
-      email: emailCheck.email,
-      password,
-      options: {
-        data: { nickname: nicknameCheck.nickname },
-      },
-    });
+    // 테스트용:
+    // Supabase 회원가입은 시도하지만 실패해도 메인페이지로 이동
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            nickname: nickname,
+          },
+        },
+      });
+
+      if (error) {
+        console.log("테스트 모드 - 회원가입 오류 무시:", error.message);
+      }
+    } catch (error) {
+      console.log("테스트 모드 - 회원가입 오류 무시:", error);
+    }
+
+    // Supabase 가입 실패 시에도 MainPage에서
+    // 입력한 닉네임을 사용할 수 있도록 임시 저장
+    sessionStorage.setItem("prizm_test_nickname", nickname);
+    sessionStorage.setItem("prizm_test_email", email);
 
     setLoading(false);
 
-    if (error) {
-      alert(`회원가입 실패: ${error.message}`);
-      return;
-    }
-
-    alert("인증 이메일을 보냈습니다. 이메일을 확인해주세요.");
-    navigate("/");
+    // 성공/실패 상관없이 무조건 메인페이지 이동
+    navigate("/main");
   };
 
   return (
@@ -72,6 +68,16 @@ function Signup() {
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit}>
+          <label htmlFor="signup-nickname">닉네임</label>
+          <input
+            id="signup-nickname"
+            type="text"
+            placeholder="닉네임을 입력하세요"
+            value={nickname}
+            onChange={(event) => setNickname(event.target.value)}
+            required
+          />
+
           <label htmlFor="signup-email">이메일</label>
           <input
             id="signup-email"
@@ -79,20 +85,6 @@ function Signup() {
             placeholder="example@email.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-            required
-          />
-
-          <label htmlFor="signup-nickname">닉네임</label>
-          <input
-            id="signup-nickname"
-            type="text"
-            placeholder="2자 이상 입력하세요"
-            value={nickname}
-            onChange={(event) => setNickname(event.target.value)}
-            minLength="2"
-            maxLength="80"
-            autoComplete="nickname"
             required
           />
 
@@ -104,19 +96,21 @@ function Signup() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             minLength="6"
-            autoComplete="new-password"
             required
           />
 
-          <label htmlFor="password-confirm">비밀번호 확인</label>
+          <label htmlFor="password-confirm">
+            비밀번호 확인
+          </label>
           <input
             id="password-confirm"
             type="password"
             placeholder="비밀번호를 다시 입력하세요"
             value={passwordConfirm}
-            onChange={(event) => setPasswordConfirm(event.target.value)}
+            onChange={(event) =>
+              setPasswordConfirm(event.target.value)
+            }
             minLength="6"
-            autoComplete="new-password"
             required
           />
 
@@ -126,11 +120,13 @@ function Signup() {
         </form>
 
         <p className="auth-guide">
-          이미 계정이 있나요? <Link to="/login">로그인</Link>
+          이미 계정이 있나요? <Link to="/">로그인</Link>
         </p>
       </section>
     </main>
   );
 }
+
+export default Signup;
 
 export default Signup;
