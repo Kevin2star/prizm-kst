@@ -142,6 +142,8 @@ function MainPage() {
       if (!active) return;
       if (userError || !userData?.user) return;
 
+      setUserId(userData.user.id);
+
       const { data, error } = await supabase
         .from("spaces")
         .select("id, name, description, join_code, updated_at")
