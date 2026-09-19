@@ -1,0 +1,7 @@
+project_id = "prizm"
+
+[functions.prizm-api]
+verify_jwt = true
+
+[functions.analyze-artifact]
+verify_jwt = true

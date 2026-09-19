@@ -1,0 +1,210 @@
+역할: 시니어 풀스택 엔지니어. Spring Boot 백엔드를 제거하고 서버를 Supabase로 대체한다.
+선행 단계: 01~13 기능이 프론트에 있고, 14에서 DB를 Supabase Postgres로 맞춘 상태여도 된다.
+  Spring이 아직 MySQL이어도 상관 없다. 이 단계에서 스키마는 Postgres에 다시 둔다.
+이번 단계 목표: JDK/Spring/JPA/STOMP를 없애고, 같은 P0(F1~F6)를 Supabase만으로 동작시킨다.
+다음 단계: 없음. 스택 교체 패치다. 새 제품 기능을 만들지 않는다.
+
+================================================================
+왜 이렇게 바꾸나
+================================================================
+14단계는 Spring이 JDBC로 Supabase에 붙는 것까지만 했다. 백엔드는 여전히 Java다.
+이제는 API, 비동기 AI 파이프라인, 실시간 이벤트까지 Supabase에서 돌린다.
+프론트는 localhost:8080 Spring을 더 이상 필요로 하지 않는다.
+
+================================================================
+고정할 아키텍처 (변경 금지)
+================================================================
+- 프론트: 기존 React (Vite). 화면·라우트·마인드맵·폴링 폴백 UX는 유지.
+- DB: Supabase Postgres. 테이블 의미는 02_data_model.txt 와 같다.
+  spaces, members, artifacts, artifact_groups
+- 서버 로직: Supabase Edge Functions (Deno). Gemini 키는 여기에만 둔다.
+- 실시간: Supabase Realtime (postgres_changes). STOMP/SockJS를 쓰지 않는다.
+- AI: Gemini 단일 벤더. 프론트에서 Gemini를 호출하지 않는다.
+  - 태깅·정리본: gemini-2.5-flash
+  - 임베딩: gemini-embedding-001 (768차원)
+- 벡터: embedding은 TEXT/JSON 문자열 컬럼. pgvector 도입 금지.
+  코사인 유사도는 Edge Function 안에서 직접 계산한다.
+- 인증: 로그인 없음. 6자리 joinCode. Supabase Auth(이메일/OAuth)를 켜서
+  제품 로그인을 만들지 않는다. 멤버는 nickname+school+major 행이다.
+
+금지:
+- Spring Boot를 "게이트웨이"로 남기지 않는다. 전환이 끝나면 /backend Java는
+  실행 경로에서 제거한다 (폴더 삭제 또는 README에서 obsolete 표시 후 더 이상 실행하지 않음).
+- VITE_ 로 GEMINI_API_KEY 를 노출하지 않는다.
+- Storage, Auth UI, Edge Functions 밖의 별도 Node/Express 서버를 새로 두지 않는다.
+
+================================================================
+보안 모델 (해커톤용, 이것만)
+================================================================
+테이블 RLS:
+  - anon SELECT 는 허용해도 된다 (데모 규모, 공개 시연).
+  - INSERT/UPDATE/DELETE 는 anon에게 주지 않는다.
+  - 모든 쓰기는 Edge Function이 service role로 수행한다.
+  - service role 키는 프론트에 넣지 않는다.
+
+프론트가 가지는 것:
+  VITE_SUPABASE_URL
+  VITE_SUPABASE_ANON_KEY
+
+Functions secrets:
+  GEMINI_API_KEY
+  GEMINI_TAG_MODEL, GEMINI_EMBED_MODEL (기본값 기존과 동일)
+  SIMILARITY_THRESHOLD (기본 0.75)
+
+================================================================
+프론트 API 계약 (응답 JSON 모양을 깨지 말 것)
+================================================================
+기존 frontend/src/api.js 가 기대하는 동작을 그대로 맞춘다.
+구현은 supabase.functions.invoke 또는 Functions HTTP URL로 바꿔도 된다.
+메서드 이름과 화면이 쓰는 필드는 유지한다.
+
+생성/입장
+  POST createSpace({ name })
+    → { id, name, joinCode }
+  POST joinSpace(code, { nickname, school, major })
+    → { id(memberId), spaceId, nickname, school, major }
+    코드는 trim + 대문자. 없으면 SPACE_NOT_FOUND
+  GET getSpace(id)
+    → { id, name, joinCode, memberCount }
+
+결과물
+  POST createArtifact(spaceId, { memberId, title, content })
+    → 즉시 반환. status=PENDING
+    필드: id, spaceId, memberId, nickname, school, major, title, content,
+          status, tags, groupId, createdAt
+    HTTP는 201에 가깝게. 업로드 응답을 분석 완료까지 기다리지 않는다.
+  GET listArtifacts(spaceId)
+  GET getArtifact(id)   (원문 패널. embedding은 주지 않는다)
+
+그룹/트리
+  GET getGroup(id)
+  GET getGraph(id)
+    응답 스키마는 prompts/09_graph_api.txt 와 현재 GraphService 와 같게.
+    프론트가 테이블을 조합해 트리를 만들지 않는다. graph는 서버(Function)가 조립한다.
+
+헬스
+  GET health → { "status": "ok" }
+  Spring /api/health 를 대체한다.
+
+에러 JSON (프론트가 message/error를 씀):
+  { "error": "SPACE_NOT_FOUND", "message": "..." }
+  한글 메시지는 기존 SpaceService/ArtifactService 톤을 따른다.
+
+================================================================
+실시간 이벤트 (의미 유지, 전송만 교체)
+================================================================
+기존 타입을 유지하면 프론트 SpacePage 분기가 산다.
+  ARTIFACT_ADDED   업로드 직후 (분석 전)
+  GROUPS_UPDATED   그룹핑/정리본 끝난 뒤
+  MEMBER_JOINED    입장 성공 뒤 (있으면 좋고, 없어도 P0)
+
+구현 방법 (택1, 권장은 A):
+  A) Function이 행을 쓴 뒤, 프론트는
+     artifacts / artifact_groups postgres_changes 를 space_id 필터로 구독.
+     INSERT artifacts → onEvent({ type: "ARTIFACT_ADDED", artifact })
+     UPDATE artifact_groups 또는 artifacts.group_id 변경 → GROUPS_UPDATED
+  B) Realtime Broadcast 채널 space:{id} 로 Function이 위 JSON을 보낸다.
+
+frontend/src/realtime.js
+  - @stomp/stompjs, sockjs-client 제거
+  - connectSpaceRealtime(spaceId, onEvent) 시그니처는 유지
+  - 연결 실패·지연 시 기존처럼 3초 POLL 폴백 (graph 재조회)
+  - 페이지 unmount 시 구독 해제
+
+핵심 UX: 메인 화면이 열린 채 다른 기기에서 올리면, 요청 버튼 없이 트리가 바뀐다.
+
+================================================================
+AI / 그룹핑 (07·08 로직 이식, 언어만 Deno TS)
+================================================================
+createArtifact 흐름:
+  1) artifacts INSERT status=PENDING, 즉시 응답 + ARTIFACT_ADDED
+  2) 같은 요청을 막지 말고 백그라운드에서 분석
+     (EdgeRuntime.waitUntil 또는 analyze-artifact Function 호출)
+  3) PROCESSING → Gemini 태깅 → 임베딩 → tags/embedding 저장 → READY
+  4) 기존 GroupingService.assignGroup 과 동일한 단순 알고리즘:
+     같은 space의 READY 임베딩과 코사인 비교, 최댓값 >= threshold 이면 그 그룹
+     (상대가 그룹 없으면 새 artifact_groups 생성 후 둘 다 배정)
+     아니면 단독 잎으로 남김
+  5) 그룹이 있으면 Gemini로 공통점/차이점/비고 갱신 (08 프롬프트 문안)
+  6) GROUPS_UPDATED
+
+실패: status=FAILED, 서버가 죽지 않음. 원문은 조회 가능.
+키 없음: 실시간 업로드는 FAILED. 시드 데이터는 Gemini 없이 READY로 넣는다.
+재시도: 태깅 JSON 파싱 실패 1회, 그래도 실패하면 tags=["미분류"].
+         embedding 실패면 FAILED.
+429: 짧게 로그 후 FAILED.
+벡터DB/HDBSCAN/커뮤니티 디텍션 금지.
+
+================================================================
+스키마 / 마이그레이션
+================================================================
+supabase/migrations 에 SQL을 둔다. Hibernate ddl-auto에 의존하지 않는다.
+- PK: bigserial / identity. 프론트 number id 유지.
+- join_code CHAR/VARCHAR(6) UNIQUE
+- artifacts.status CHECK (PENDING, PROCESSING, READY, FAILED)
+- tags, embedding TEXT (JSON 문자열)
+- artifact_groups 테이블명 유지 (group 예약어 회피)
+- 인덱스: join_code unique, artifacts(space_id), artifacts(group_id), members(space_id)
+- created_at / updated_at timestamptz
+
+기존 Spring이 만든 테이블이 있으면 이번 마이그레이션과 맞춰 정리한다.
+로컬 MySQL 데이터 이전 스크립트는 만들지 않는다.
+
+================================================================
+데모 시드 (12단계 동등)
+================================================================
+참여 코드 CAFE01, 이름 "교내 카페 개선안"
+멤버 예: 민수(산업공학), 지현(컴퓨터공학), 수아(시각디자인)
+대기시간 그룹은 접힌 상태로 보이게 graph JSON이 나와야 한다.
+시드는 SQL 또는 service-role 스크립트. Gemini 호출 없음.
+README 시연 순서(메인/서브 노트북, live-upload.md)는 유지하되
+백엔드 실행 명령을 Functions/프론트만으로 고친다.
+
+================================================================
+디렉터리 (권장)
+================================================================
+  /frontend                 기존 React. API_BASE/8080 의존 제거
+  /supabase/migrations
+  /supabase/functions/      health, 위 API들, analyze
+  /supabase/seed.sql        데모 시드
+  /prompts                  건드이되 스택 문구만 15 완료 기준으로 맞춤
+  /backend                  전환 완료 후 실행하지 않음. 삭제 권장.
+  README.md
+
+프론트에서 더 이상 VITE_API_BASE_URL=http://localhost:8080 을 기본값으로 쓰지 않는다.
+
+================================================================
+구현 순서 (에이전트는 이 순서를 지킨다)
+================================================================
+A. 현재 컨트롤러/DTO/AnalysisPipeline/GroupingService/GraphService/realtime.js/api.js
+   를 읽고 계약 체크리스트를 만든다. 추측으로 JSON을 바꾸지 않는다.
+B. Postgres 마이그레이션 + RLS (select anon / write service role).
+C. Edge Functions로 health, space, join, artifact, graph, group, analyze 이식.
+D. 프론트 api.js / realtime.js / env 를 Supabase로 연결. STOMP 패키지 제거.
+E. 시드 SQL 이식. DemoDataSeeder Java를 복제하지 말고 결과 데이터가 같게.
+F. README, .env.example, prompts/00·01·02·07·11·13 의 서버 전제를
+   Spring → Supabase Functions/Realtime 으로 고친다.
+   14는 "JDBC로 Spring 유지" 단계로 남겨 두되, 15 이후에는 실행하지 않는다고 00에 적는다.
+G. JDK 없이 frontend + Supabase만으로 시연 플로우가 도는지 확인한다.
+   프로젝트 키가 없으면 타입체크/로컬 함수 골격까지 하고 README에
+   "Dashboard 프로젝트 + anon key + functions secret" 을 명시한다.
+
+================================================================
+하지 말 것
+================================================================
+- P1 파일 업로드, P2 노드 이동/댓글, 로그인, 힘-방향 그래프.
+- pgvector, Auth, Storage 기반 제품 재설계.
+- 프론트에서 임베딩 계산/그룹핑.
+- Spring과 Functions를 동시에 쓰는 하이브리드를 최종 상태로 남기기.
+- 시크릿을 커밋하기.
+
+================================================================
+완료 기준
+================================================================
+- ./mvnw spring-boot:run 없이 프론트가 동작한다.
+- GET health 가 ok 이고, 스페이스 생성/CAFE01 입장/업로드/graph가 된다.
+- 업로드 HTTP는 즉시 PENDING, 이후 READY/FAILED.
+- Gemini 키는 Functions secret에만 있다.
+- 다른 클라이언트의 업로드가 Realtime 또는 3초 폴링으로 요청 없이 보인다.
+- README에 JDK/MySQL/Spring 실행이 필수로 남아 있지 않다.
+- 00 인덱스 기술 스택이 Supabase(Postgres + Edge Functions + Realtime) + React + Gemini 이다.

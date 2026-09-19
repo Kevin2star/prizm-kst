@@ -1,0 +1,82 @@
+역할: Postgres 스키마 엔지니어.
+선행 단계: 01_project_scaffolding.txt 가 완료되어 있어야 한다.
+이번 단계 목표: PRD 데이터 모델을 Supabase 마이그레이션 SQL로 구현한다.
+다음 단계: 03_space_and_join_api.txt
+
+================================================================
+제품 컨텍스트
+================================================================
+스페이스(Space)는 하나의 주제/프로젝트 작업 공간이다.
+참여자(Member)는 로그인 없이 닉네임+소속으로 입장한다.
+결과물(Artifact)은 참여자가 올린 텍스트다.
+그룹(Group)은 유사도 기준으로 묶인 결과물 집합이며, 비교 정리본을 가진다.
+
+================================================================
+엔티티 스펙 (필드명·의미 준수)
+================================================================
+Space
+  - id: Long, PK, auto increment
+  - name: 스페이스 주제 (예: "캠퍼스 개선 아이디어")
+  - joinCode: 6자리 참여 코드, UNIQUE, 대문자+숫자
+  - createdAt: Instant
+
+Member
+  - id: Long, PK
+  - space: Space (many-to-one)
+  - nickname: 닉네임
+  - school: 학교
+  - major: 전공
+  - createdAt: Instant
+  - 같은 스페이스 안에서 nickname 중복은 허용해도 된다 (해커톤 단순화)
+
+Artifact
+  - id: Long, PK
+  - space: Space
+  - member: Member
+  - title: 제목 (필수)
+  - content: 본문 (TEXT, 필수)
+  - tags: JSON 배열 문자열 또는 ElementCollection. 예: ["대기시간","동선"]
+  - embedding: JSON 배열 문자열. 768차원 float 벡터. 분석 전에는 null
+  - group: Group (nullable, many-to-one)
+  - status: ENUM { PENDING, PROCESSING, READY, FAILED }
+  - createdAt: Instant
+  - updatedAt: Instant
+
+Group
+  - id: Long, PK
+  - space: Space
+  - label: 그룹 라벨 (예: "대기시간 문제 해결")
+  - commonPoints: 공통점 텍스트
+  - differences: 차이점 텍스트 (항목별 "누가 / 어떤 관점으로 / 무엇을 다르게")
+  - notes: 비고 (빈틈, 특이 접근, 확장 아이디어)
+  - updatedAt: Instant
+
+인덱스
+  - Space.joinCode unique
+  - Artifact(space_id)
+  - Artifact(group_id)
+  - Member(space_id)
+
+================================================================
+구현할 것
+================================================================
+1) 위 엔티티와 대응하는 테이블을 supabase/migrations 에 만든다.
+2) embedding / tags는 Postgres TEXT 컬럼에 JSON 문자열로 저장한다.
+   벡터DB(pgvector 포함)는 쓰지 않는다.
+3) 테이블명 artifact_groups 로 group 예약어를 피한다.
+4) RLS: anon SELECT 허용, 쓰기는 Edge Function(service role)만.
+5) Realtime publication에 artifacts, artifact_groups, members를 넣는다.
+
+================================================================
+하지 말 것
+================================================================
+- REST API 컨트롤러를 이 단계에서 본격 구현하지 않는다. (다음 단계)
+- Gemini 호출, 유사도 계산, WebSocket을 넣지 않는다.
+- Flyway/Liquibase/Hibernate ddl-auto에 의존하지 않는다. supabase/migrations 를 쓴다.
+- User, Auth, Session 테이블을 만들지 않는다.
+
+================================================================
+완료 기준
+================================================================
+- Space, Member, Artifact, Group 테이블이 Supabase Postgres에 생긴다.
+- embedding을 별도 벡터 스토어가 아니라 DB 컬럼에 저장하는 설계가 코드에 반영되어 있다.
