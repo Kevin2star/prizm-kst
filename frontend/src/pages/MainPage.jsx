@@ -1,32 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../api";
 import {
   applySpaceSession,
   createOwnedSpace,
-  ensureSpaceParticipation,
+  deleteOwnedSpace,
+  findSpaceMembership,
+  joinSpaceByCode,
   listMySpaces,
 } from "../spaceMembership";
+import { clearSession, loadSession } from "../session";
 import { supabase } from "../supabaseClient";
 import "./MainPage.css";
-
-function BellIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-      <path d="M10 21h4" />
-    </svg>
-  );
-}
 
 function EditIcon() {
   return (
@@ -128,7 +112,6 @@ function MainPage() {
     sessionStorage.getItem("prizm_test_email") || ""
   );
   const [showProfile, setShowProfile] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [joiningSpace, setJoiningSpace] = useState(false);
@@ -148,8 +131,9 @@ function MainPage() {
 
   const [spaceName, setSpaceName] = useState("");
   const [spaceDescription, setSpaceDescription] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [createdSpace, setCreatedSpace] = useState(null);
   const [spaces, setSpaces] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const applyFavorites = (list) => {
     const favorites = readFavorites();
@@ -181,6 +165,8 @@ function MainPage() {
         navigate("/");
         return;
       }
+
+      setCurrentUserId(user.id);
 
       const supabaseNickname = user.user_metadata?.nickname;
 
@@ -214,44 +200,6 @@ function MainPage() {
     navigate("/");
   };
 
-  const [invitations, setInvitations] = useState([
-    {
-      id: 101,
-      name: "디자인 레퍼런스",
-      description: "다양한 레퍼런스를 모아봐요.",
-      inviter: "김지수",
-      inviteCode: "REF-9T4M",
-      members: [
-        { initial: "J", name: "김지수" },
-        { initial: "R", name: "리즘" },
-      ],
-    },
-  ]);
-
-  const notifications = [
-    {
-      id: 1,
-      title: "새로운 스페이스 초대",
-      text: "김지수님이 디자인 레퍼런스에 초대했어요.",
-      time: "5분 전",
-      unread: true,
-    },
-    {
-      id: 2,
-      title: "새로운 결과물이 추가됐어요",
-      text: "PRIZM 해커톤에 새로운 결과물이 등록됐어요.",
-      time: "1시간 전",
-      unread: true,
-    },
-    {
-      id: 3,
-      title: "스페이스 업데이트",
-      text: "서비스 기획 스페이스가 업데이트됐어요.",
-      time: "어제",
-      unread: false,
-    },
-  ];
-
   const toggleFavorite = (id) => {
     const nextFavorites = readFavorites();
     const key = String(id);
@@ -271,10 +219,6 @@ function MainPage() {
 
   const openSpace = async (space) => {
     if (openingSpaceRef.current) return;
-    if (space.isPreview) {
-      alert("미리보기 데이터라 실제 워크스페이스로 이동하지 않습니다.");
-      return;
-    }
 
     openingSpaceRef.current = true;
     try {
@@ -293,10 +237,26 @@ function MainPage() {
               space_id: space.id,
               nickname: space.memberNickname || nickname,
             }
-          : null;
+          : await findSpaceMembership(space.id, user);
 
       if (!membership) {
-        membership = await ensureSpaceParticipation(user, space.id);
+        membership = await findSpaceMembership(space.id, user);
+      }
+
+      if (!membership && space.inviteCode) {
+        const { data: spaceRow } = await supabase
+          .from("spaces")
+          .select("id, owner_id, join_code")
+          .eq("id", space.id)
+          .maybeSingle();
+        if (spaceRow?.join_code) {
+          const member = await joinSpaceByCode(spaceRow.join_code || space.inviteCode);
+          membership = {
+            id: member.id,
+            space_id: member.space_id,
+            nickname: member.nickname,
+          };
+        }
       }
 
       if (!membership) {
@@ -352,55 +312,29 @@ function MainPage() {
         name: spaceName.trim(),
         description: spaceDescription.trim(),
       });
-      await ensureSpaceParticipation(user, space.id);
+      const member = await joinSpaceByCode(space.join_code);
+      applySpaceSession(
+        {
+          id: member.id,
+          space_id: member.space_id,
+          nickname: member.nickname,
+        },
+        space.join_code
+      );
       await refreshSpaces(user);
 
+      setCreatedSpace({
+        id: space.id,
+        name: space.name,
+        inviteCode: space.join_code,
+      });
       setSpaceName("");
       setSpaceDescription("");
-      setInviteEmail("");
-      setShowModal(false);
     } catch (err) {
       alert(err.message || "스페이스를 만들지 못했습니다.");
     } finally {
       setCreatingSpace(false);
     }
-  };
-
-  const joinSpace = (invitation) => {
-    const alreadyJoined = spaces.some(
-      (space) => space.inviteCode === invitation.inviteCode
-    );
-
-    if (alreadyJoined) {
-      setInvitations((prev) =>
-        prev.filter((item) => item.id !== invitation.id)
-      );
-      return;
-    }
-
-    setSpaces((prev) => [
-      ...prev,
-      {
-        id: invitation.id,
-        name: invitation.name,
-        description: invitation.description,
-        inviteCode: invitation.inviteCode,
-        members: invitation.members,
-        updated: "방금 전",
-        favorite: false,
-        isPreview: true,
-      },
-    ]);
-
-    setInvitations((prev) =>
-      prev.filter((item) => item.id !== invitation.id)
-    );
-  };
-
-  const declineInvitation = (id) => {
-    setInvitations((prev) =>
-      prev.filter((item) => item.id !== id)
-    );
   };
 
   const joinByCode = async () => {
@@ -412,15 +346,14 @@ function MainPage() {
       return;
     }
 
-    if (
-      spaces.some(
-        (space) =>
-          !space.isPreview &&
-          space.inviteCode?.toUpperCase() === normalizedCode
-      )
-    ) {
-      setJoinStatus("error");
-      setJoinMessage("이미 참여 중인 스페이스예요.");
+    const existing = spaces.find(
+      (space) => space.inviteCode?.toUpperCase() === normalizedCode
+    );
+    if (existing) {
+      await openSpace(existing);
+      setJoinCode("");
+      setJoinMessage("");
+      setJoinStatus("");
       return;
     }
 
@@ -436,16 +369,13 @@ function MainPage() {
         return;
       }
 
-      const member = await api.joinSpace(normalizedCode, { nickname });
+      const member = await joinSpaceByCode(normalizedCode);
+      applySpaceSession(member, normalizedCode);
       await refreshSpaces(user);
       setJoinStatus("success");
       setJoinMessage("스페이스에 참여했어요!");
       setJoinCode("");
-      setInvitations((prev) =>
-        prev.filter(
-          (item) => item.inviteCode.toUpperCase() !== normalizedCode
-        )
-      );
+      navigate(`/spaces/${member.space_id}`);
       return member;
     } catch (err) {
       setJoinStatus("error");
@@ -489,18 +419,46 @@ function MainPage() {
     setEditingName("");
   };
 
-  const deleteSpace = (space) => {
+  const deleteSpace = async (space) => {
     const confirmed = window.confirm(
       `"${space.name}" 스페이스를 삭제할까요?`
     );
 
     if (!confirmed) return;
 
-    setSpaces((prev) =>
-      prev.filter((item) => item.id !== space.id)
-    );
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        navigate("/");
+        return;
+      }
 
-    setOpenSpaceMenu(null);
+      await deleteOwnedSpace(space, user);
+
+      const nextFavorites = readFavorites();
+      nextFavorites.delete(String(space.id));
+      writeFavorites(nextFavorites);
+
+      const session = loadSession();
+      if (String(session.spaceId) === String(space.id)) {
+        clearSession();
+      }
+
+      await refreshSpaces(user);
+      setOpenSpaceMenu(null);
+    } catch (err) {
+      alert(err.message || "스페이스를 삭제하지 못했습니다.");
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (user) await refreshSpaces(user);
+      } catch {
+        // keep current list
+      }
+    }
   };
 
   const openInviteModal = (space) => {
@@ -531,7 +489,6 @@ function MainPage() {
       className="app"
       onClick={() => {
         setOpenSpaceMenu(null);
-        setShowNotifications(false);
         setShowProfile(false);
       }}
     >
@@ -549,56 +506,6 @@ function MainPage() {
 
         <div className="header-right">
           <div
-            className="notification-wrapper"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              className="notification-button"
-              aria-label="알림"
-              onClick={() => {
-                setShowNotifications((prev) => !prev);
-                setShowProfile(false);
-                setOpenSpaceMenu(null);
-              }}
-            >
-              <BellIcon />
-              <span className="notification-dot" />
-            </button>
-
-            {showNotifications && (
-              <div className="notification-menu">
-                <div className="notification-header">
-                  <h3>알림</h3>
-                  <span>최근 알림</span>
-                </div>
-
-                <div className="notification-list">
-                  {notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`notification-item ${
-                        notification.unread ? "unread" : ""
-                      }`}
-                    >
-                      {notification.unread && (
-                        <span className="unread-dot" />
-                      )}
-
-                      <div className="notification-content">
-                        <strong>{notification.title}</strong>
-                        <p>{notification.text}</p>
-                        <span className="notification-time">
-                          {notification.time}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div
             className="profile-wrapper"
             onClick={(e) => e.stopPropagation()}
           >
@@ -606,7 +513,6 @@ function MainPage() {
               className="profile"
               onClick={() => {
                 setShowProfile((prev) => !prev);
-                setShowNotifications(false);
                 setOpenSpaceMenu(null);
               }}
             >
@@ -721,7 +627,6 @@ function MainPage() {
                         onClick={() => {
                           toggleSpaceMenu(space.id);
                           setShowProfile(false);
-                          setShowNotifications(false);
                         }}
                       >
                         •••
@@ -749,13 +654,15 @@ function MainPage() {
 
                           <div className="space-menu-divider" />
 
-                          <button
-                            className="space-menu-item delete"
-                            onClick={() => deleteSpace(space)}
-                          >
-                            <TrashIcon />
-                            <span>스페이스 삭제</span>
-                          </button>
+                          {space.ownerId === currentUserId && (
+                            <button
+                              className="space-menu-item delete"
+                              onClick={() => deleteSpace(space)}
+                            >
+                              <TrashIcon />
+                              <span>스페이스 삭제</span>
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -796,9 +703,11 @@ function MainPage() {
               className="space-card create-card"
               onClick={(e) => {
                 e.stopPropagation();
+                setCreatedSpace(null);
+                setSpaceName("");
+                setSpaceDescription("");
                 setShowModal(true);
                 setShowProfile(false);
-                setShowNotifications(false);
                 setOpenSpaceMenu(null);
               }}
             >
@@ -836,6 +745,8 @@ function MainPage() {
                     }
                   }}
                   placeholder="참여 코드를 입력하세요"
+                  maxLength={6}
+                  autoComplete="off"
                 />
 
                 <button onClick={joinByCode} disabled={joiningSpace}>
@@ -853,73 +764,16 @@ function MainPage() {
             )}
           </div>
         </section>
-
-        {/* 초대받은 스페이스 */}
-        {invitations.length > 0 && (
-          <section className="invitation-section">
-            <div className="section-title invitation-title">
-              <h2>초대받은 스페이스</h2>
-              <span className="space-count">
-                {invitations.length}
-              </span>
-            </div>
-
-            <div className="invitation-list">
-              {invitations.map((invitation) => (
-                <div
-                  className="invitation-card"
-                  key={invitation.id}
-                >
-                  <div className="invitation-info">
-                    <span className="space-label">
-                      SPACE
-                    </span>
-
-                    <h3>{invitation.name}</h3>
-                    <p>{invitation.description}</p>
-
-                    <div className="inviter">
-                      <span className="inviter-avatar">
-                        {invitation.inviter.charAt(0)}
-                      </span>
-
-                      <span>
-                        {invitation.inviter}님이 초대했어요.
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="invite-buttons">
-                    <button
-                      className="decline"
-                      onClick={() =>
-                        declineInvitation(invitation.id)
-                      }
-                    >
-                      거절
-                    </button>
-
-                    <button
-                      className="join"
-                      onClick={() =>
-                        joinSpace(invitation)
-                      }
-                    >
-                      참여하기
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
       </main>
 
       {/* 새 스페이스 */}
       {showModal && (
         <div
           className="modal-background"
-          onClick={() => setShowModal(false)}
+          onClick={() => {
+            setShowModal(false);
+            setCreatedSpace(null);
+          }}
         >
           <div
             className="modal"
@@ -927,64 +781,102 @@ function MainPage() {
           >
             <div className="modal-header">
               <div>
-                <h2>새 스페이스 만들기</h2>
+                <h2>
+                  {createdSpace ? "초대 코드를 공유하세요" : "새 스페이스 만들기"}
+                </h2>
                 <p>
-                  새로운 프로젝트 공간을 만들어보세요.
+                  {createdSpace
+                    ? "이 코드는 스페이스를 삭제하기 전까지 바뀌지 않습니다."
+                    : "새로운 프로젝트 공간을 만들어보세요."}
                 </p>
               </div>
 
               <button
                 className="close-button"
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  setCreatedSpace(null);
+                }}
               >
                 ×
               </button>
             </div>
 
-            <label>스페이스 이름</label>
-            <input
-              value={spaceName}
-              onChange={(e) =>
-                setSpaceName(e.target.value)
-              }
-              placeholder="예: PRIZM 해커톤"
-              autoFocus
-            />
+            {createdSpace ? (
+              <>
+                <div className="share-list">
+                  <div className="share-row">
+                    <div className="share-info">
+                      <span className="share-label">
+                        참여 코드
+                      </span>
+                      <span className="share-value code-value">
+                        {createdSpace.inviteCode}
+                      </span>
+                    </div>
+                    <button
+                      className="share-copy-button"
+                      onClick={() =>
+                        copyText(createdSpace.inviteCode, "created")
+                      }
+                    >
+                      <CopyIcon />
+                      {copiedType === "created" ? "복사됨" : "복사"}
+                    </button>
+                  </div>
+                </div>
 
-            <label>프로젝트 설명</label>
-            <textarea
-              value={spaceDescription}
-              onChange={(e) =>
-                setSpaceDescription(e.target.value)
-              }
-              placeholder="프로젝트를 간단하게 설명해주세요."
-            />
+                <div className="modal-buttons">
+                  <button
+                    className="create-button"
+                    onClick={() => {
+                      setShowModal(false);
+                      setCreatedSpace(null);
+                    }}
+                  >
+                    확인
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <label>스페이스 이름</label>
+                <input
+                  value={spaceName}
+                  onChange={(e) =>
+                    setSpaceName(e.target.value)
+                  }
+                  placeholder="예: PRIZM 해커톤"
+                  autoFocus
+                />
 
-            <label>팀원 이메일 초대</label>
-            <input
-              value={inviteEmail}
-              onChange={(e) =>
-                setInviteEmail(e.target.value)
-              }
-              placeholder="team@example.com"
-            />
+                <label>프로젝트 설명</label>
+                <textarea
+                  value={spaceDescription}
+                  onChange={(e) =>
+                    setSpaceDescription(e.target.value)
+                  }
+                  placeholder="프로젝트를 간단하게 설명해주세요."
+                />
 
-            <div className="modal-buttons">
-              <button
-                className="cancel-button"
-                onClick={() => setShowModal(false)}
-              >
-                취소
-              </button>
+                <div className="modal-buttons">
+                  <button
+                    className="cancel-button"
+                    onClick={() => setShowModal(false)}
+                  >
+                    취소
+                  </button>
 
-              <button
-                className="create-button"
-                disabled={creatingSpace}
-                onClick={createSpace}
-              >
-                만들기
-              </button>
-            </div>
+                  <button
+                    className="create-button"
+                    disabled={creatingSpace}
+                    onClick={createSpace}
+                  >
+                    만들기
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -92,6 +92,22 @@ Deno.serve(async (req) => {
       if (!space) throw new HttpError(404, "SPACE_NOT_FOUND", "참여 코드를 찾을 수 없습니다.");
       const nickname = requireText(body.nickname, "NICKNAME_REQUIRED", "닉네임을 입력하세요.");
       const spaceId = num(space.id);
+      const authHeader = req.headers.get("Authorization") || "";
+      const token = authHeader.replace(/^Bearer\s+/i, "").trim();
+      let userId: string | null = null;
+      if (token) {
+        const { data: authData } = await admin.auth.getUser(token);
+        userId = authData.user?.id ?? null;
+      }
+      if (userId) {
+        const { data: byUser } = await admin
+          .from("members")
+          .select("*")
+          .eq("space_id", space.id)
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (byUser) return json(memberJson(spaceId, byUser as Record<string, unknown>));
+      }
       const requestedId = Number(body.memberId);
       if (Number.isFinite(requestedId) && requestedId > 0) {
         const { data: byId } = await admin
@@ -109,13 +125,27 @@ Deno.serve(async (req) => {
       if (existingError) throw existingError;
       const nickKey = normIdentity(nickname);
       const matched = (existingRows ?? []).find((row) =>
-        normIdentity(row.nickname) === nickKey
+        normIdentity(row.nickname) === nickKey && (userId ? !row.user_id || row.user_id === userId : !row.user_id)
       );
-      if (matched) return json(memberJson(spaceId, matched as Record<string, unknown>));
-      const { data: member, error } = await admin.from("members").insert({
+      if (matched) {
+        if (userId && !matched.user_id) {
+          const { data: linked, error: linkError } = await admin
+            .from("members")
+            .update({ user_id: userId })
+            .eq("id", matched.id)
+            .select("*")
+            .single();
+          if (linkError) throw linkError;
+          return json(memberJson(spaceId, linked as Record<string, unknown>));
+        }
+        return json(memberJson(spaceId, matched as Record<string, unknown>));
+      }
+      const insertRow: Record<string, unknown> = {
         space_id: space.id,
         nickname,
-      }).select("*").single();
+      };
+      if (userId) insertRow.user_id = userId;
+      const { data: member, error } = await admin.from("members").insert(insertRow).select("*").single();
       if (error) throw error;
       return json(memberJson(spaceId, member as Record<string, unknown>));
     }

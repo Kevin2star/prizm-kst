@@ -13,21 +13,40 @@ function Home(){
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      alert(`로그인 실패: ${error.message}`);
+    if (!email.trim() || !password.trim()) {
+      alert("이메일과 비밀번호를 입력해주세요.");
       return;
     }
 
-    navigate("/main");
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        console.error("로그인 실패:", error.message);
+        alert("이메일 또는 비밀번호가 올바르지 않습니다.");
+        setLoading(false);
+        return;
+      }
+
+      const user = data.user;
+      const nickname = user?.user_metadata?.nickname || "";
+
+      sessionStorage.setItem("prizm_test_nickname", nickname);
+      sessionStorage.setItem("prizm_test_email", user?.email || email.trim());
+
+      setLoading(false);
+      navigate("/main");
+    } catch (error) {
+      console.error("로그인 중 오류:", error);
+      alert("로그인 중 오류가 발생했습니다.");
+      setLoading(false);
+    }
   };
 
   return (
@@ -132,6 +151,7 @@ function Home(){
                   placeholder="이메일을 입력하세요"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
                   required
                 />
               </div>
@@ -146,6 +166,7 @@ function Home(){
                   placeholder="비밀번호를 입력하세요"
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
                   required
                 />
 

@@ -49,7 +49,14 @@ export function connectSpaceRealtime(spaceId, onEvent) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'members', filter }, (payload) => {
         emit({
           type: 'MEMBER_JOINED',
+          member: payload.new,
           nickname: payload.new?.nickname,
+        })
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'space_messages', filter }, (payload) => {
+        emit({
+          type: 'MESSAGE_ADDED',
+          message: payload.new,
         })
       })
       .subscribe((status) => {
