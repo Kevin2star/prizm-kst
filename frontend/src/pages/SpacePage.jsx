@@ -34,6 +34,40 @@ function Icon({ children }) {
   )
 }
 
+const SIDEBAR_PX = 64
+
+function mapChatMessage(row, sessionMemberId, colorFn) {
+  const memberId = row.memberId ?? row.member_id ?? null
+  const nickname = row.nickname || '멤버'
+  const rawId = row.id
+  const id =
+    rawId == null
+      ? `msg-${Date.now()}`
+      : String(rawId).startsWith('msg-') || String(rawId).startsWith('tmp-')
+        ? String(rawId)
+        : `msg-${rawId}`
+  return {
+    id,
+    name: nickname,
+    text: row.body || row.text || '',
+    color: colorFn(nickname, memberId),
+    mine: memberId != null && String(memberId) === String(sessionMemberId),
+    memberId: memberId == null ? null : String(memberId),
+    createdAt: row.createdAt || row.created_at || null,
+    kind: 'chat',
+  }
+}
+
+function upsertTeamMessage(current, msg) {
+  if (!msg?.id) return current
+  if (current.some((item) => item.id === msg.id)) return current
+  const next = current.filter((item) => {
+    if (!String(item.id).startsWith('tmp-')) return true
+    return !(item.text === msg.text && String(item.memberId) === String(msg.memberId))
+  })
+  return [...next, msg]
+}
+
 function startResize(event, workspace, leftCol, rightCol, rightMin) {
   if (!workspace || !leftCol || !rightCol) return
   event.preventDefault()
@@ -84,6 +118,8 @@ export default function SpacePage() {
   const [mapFailed, setMapFailed] = useState(false)
   const [teamDraft, setTeamDraft] = useState('')
   const [teamMessages, setTeamMessages] = useState([])
+  const [spaceMembers, setSpaceMembers] = useState([])
+  const [sendingTeam, setSendingTeam] = useState(false)
   const [aiMessages, setAiMessages] = useState([
     {
       id: 'intro',
@@ -160,14 +196,56 @@ export default function SpacePage() {
   }, [spaceId, navigate])
 
   async function refresh() {
-    const [spaceData, graphData, list] = await Promise.all([
+    const [spaceData, graphData, list, messageResult] = await Promise.all([
       api.getSpace(spaceId),
       api.getGraph(spaceId),
       api.listArtifacts(spaceId),
+      api.listMessages(spaceId).catch(() => null),
     ])
+    let memberRows = spaceData.members
+    if (!Array.isArray(memberRows)) {
+      const { data, error } = await supabase
+        .from('members')
+        .select('id, nickname, user_id')
+        .eq('space_id', spaceId)
+        .order('id', { ascending: true })
+      if (error) throw error
+      memberRows = data || []
+    }
+    let messages = messageResult
+    if (!Array.isArray(messages)) {
+      const { data, error } = await supabase
+        .from('space_messages')
+        .select('id, space_id, member_id, nickname, body, created_at')
+        .eq('space_id', spaceId)
+        .order('created_at', { ascending: true })
+        .limit(200)
+      if (error) throw error
+      messages = (data || []).map((row) => ({
+        id: row.id,
+        spaceId: row.space_id,
+        memberId: row.member_id,
+        nickname: row.nickname,
+        body: row.body,
+        createdAt: row.created_at,
+      }))
+    }
     setSpace(spaceData)
+    setSpaceMembers(memberRows)
     setGraph(graphData)
     setArtifacts(list)
+    setTeamMessages((current) => {
+      const incoming = (messages || []).map((row) =>
+        mapChatMessage(row, session.memberId, () => '#4b5563'),
+      )
+      let next = incoming
+      current
+        .filter((item) => String(item.id).startsWith('tmp-'))
+        .forEach((item) => {
+          next = upsertTeamMessage(next, item)
+        })
+      return next
+    })
     setExpanded((current) => {
       if (current.size > 0) return current
       const next = new Set()
@@ -181,6 +259,8 @@ export default function SpacePage() {
 
   useEffect(() => {
     setMapFailed(false)
+    setTeamMessages([])
+    setSpaceMembers([])
     refresh().catch((err) => {
       if (isMissingSpace(err)) {
         clearSession()
@@ -189,7 +269,27 @@ export default function SpacePage() {
       }
       setError(err.message)
     })
-    const stop = connectSpaceRealtime(spaceId, () => {
+    const stop = connectSpaceRealtime(spaceId, (event) => {
+      if (event?.type === 'MESSAGE_ADDED' && event.message) {
+        const row = event.message
+        setTeamMessages((current) =>
+          upsertTeamMessage(
+            current,
+            mapChatMessage(
+              {
+                id: row.id,
+                memberId: row.member_id ?? row.memberId,
+                nickname: row.nickname,
+                body: row.body,
+                createdAt: row.created_at ?? row.createdAt,
+              },
+              session.memberId,
+              () => '#4b5563',
+            ),
+          ),
+        )
+        return
+      }
       refresh().catch(() => {})
     })
     return stop
@@ -206,12 +306,12 @@ export default function SpacePage() {
         map.set(key, { key, nickname, memberId: id })
         return
       }
-      if (id && id === String(session.memberId)) existing.memberId = id
+      if (id && !existing.memberId) existing.memberId = id
     }
+    spaceMembers.forEach((item) => add(item.nickname, item.id))
     add(session.nickname, session.memberId)
-    artifacts.forEach((item) => add(item.nickname, item.memberId))
     return [...map.values()]
-  }, [artifacts, session.memberId, session.nickname])
+  }, [spaceMembers, session.memberId, session.nickname])
 
   const memberColors = useMemo(() => memberColorMap(members), [members])
 
@@ -219,23 +319,29 @@ export default function SpacePage() {
     return memberColors.get(identityKey(nickname, memberId)) || '#4b5563'
   }
 
-  useEffect(() => {
-    setTeamMessages((current) => {
-      const next = [...current]
-      artifacts.forEach((item) => {
-        const id = `up-${item.id}`
-        if (next.some((msg) => msg.id === id)) return
-        next.push({
-          id,
-          name: item.nickname || '멤버',
-          text: `결과물을 올렸습니다: ${item.title}`,
-          color: personColor(item.nickname, item.memberId),
-          mine: String(item.memberId) === String(session.memberId),
-        })
-      })
-      return next
+  const visibleTeamMessages = useMemo(() => {
+    const chats = teamMessages.map((msg) => ({
+      ...msg,
+      color: personColor(msg.name, msg.memberId),
+      mine: msg.memberId != null && String(msg.memberId) === String(session.memberId),
+    }))
+    const uploads = artifacts.map((item) => ({
+      id: `up-${item.id}`,
+      name: item.nickname || '멤버',
+      text: `결과물을 올렸습니다: ${item.title}`,
+      color: personColor(item.nickname, item.memberId),
+      mine: String(item.memberId) === String(session.memberId),
+      memberId: item.memberId == null ? null : String(item.memberId),
+      createdAt: item.createdAt || item.created_at || null,
+      kind: 'upload',
+    }))
+    return [...uploads, ...chats].sort((a, b) => {
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0
+      if (ta !== tb) return ta - tb
+      return String(a.id).localeCompare(String(b.id))
     })
-  }, [artifacts, session.memberId, memberColors])
+  }, [artifacts, teamMessages, session.memberId, memberColors])
 
   useEffect(() => {
     setAiMessages((current) =>
@@ -256,7 +362,7 @@ export default function SpacePage() {
 
   useEffect(() => {
     if (teamScrollRef.current) teamScrollRef.current.scrollTop = teamScrollRef.current.scrollHeight
-  }, [teamMessages])
+  }, [visibleTeamMessages])
 
   useEffect(() => {
     if (aiScrollRef.current) aiScrollRef.current.scrollTop = aiScrollRef.current.scrollHeight
@@ -355,20 +461,69 @@ export default function SpacePage() {
     }
   }
 
-  function sendTeam() {
+  async function sendTeam() {
     const text = teamDraft.trim()
-    if (!text) return
-    setTeamMessages((current) => [
-      ...current,
-      {
-        id: `t-${Date.now()}`,
-        name: session.nickname,
-        text,
-        color: personColor(session.nickname, session.memberId),
-        mine: true,
-      },
-    ])
+    if (!text || sendingTeam) return
+    const tempId = `tmp-${Date.now()}`
+    setSendingTeam(true)
     setTeamDraft('')
+    setTeamMessages((current) =>
+      upsertTeamMessage(
+        current,
+        mapChatMessage(
+          {
+            id: tempId,
+            memberId: session.memberId,
+            nickname: session.nickname,
+            body: text,
+            createdAt: new Date().toISOString(),
+          },
+          session.memberId,
+          () => '#4b5563',
+        ),
+      ),
+    )
+    try {
+      let saved
+      try {
+        saved = await api.sendMessage(spaceId, {
+          memberId: Number(session.memberId),
+          body: text,
+        })
+      } catch {
+        const { data, error } = await supabase
+          .from('space_messages')
+          .insert({
+            space_id: Number(spaceId),
+            member_id: Number(session.memberId),
+            nickname: session.nickname,
+            body: text,
+          })
+          .select('id, space_id, member_id, nickname, body, created_at')
+          .single()
+        if (error) throw error
+        saved = {
+          id: data.id,
+          spaceId: data.space_id,
+          memberId: data.member_id,
+          nickname: data.nickname,
+          body: data.body,
+          createdAt: data.created_at,
+        }
+      }
+      setTeamMessages((current) =>
+        upsertTeamMessage(
+          current.filter((item) => item.id !== tempId),
+          mapChatMessage(saved, session.memberId, () => '#4b5563'),
+        ),
+      )
+    } catch (err) {
+      setTeamMessages((current) => current.filter((item) => item.id !== tempId))
+      setTeamDraft(text)
+      setError(err.message)
+    } finally {
+      setSendingTeam(false)
+    }
   }
 
   return (
@@ -440,10 +595,10 @@ export default function SpacePage() {
             </h2>
           </div>
           <div className="nlm-scroll" ref={teamScrollRef}>
-            {teamMessages.length === 0 ? (
-              <p className="nlm-empty">업로드되면 여기에 알림이 뜹니다. 팀 메시지는 이 탭에서만 유지됩니다.</p>
+            {visibleTeamMessages.length === 0 ? (
+              <p className="nlm-empty">팀과 메시지를 주고받으세요. 같은 스페이스의 모든 멤버에게 공유됩니다.</p>
             ) : (
-              teamMessages.map((msg) => (
+              visibleTeamMessages.map((msg) => (
                 <div key={msg.id} className={`nlm-msg${msg.mine ? ' mine' : ''}`}>
                   <div className="nlm-msg-name" style={{ color: msg.color }}>
                     {msg.name}
@@ -467,7 +622,7 @@ export default function SpacePage() {
                   }
                 }}
               />
-              <button type="button" className="nlm-send" onClick={sendTeam} aria-label="팀 메시지 보내기">
+              <button type="button" className="nlm-send" onClick={sendTeam} disabled={sendingTeam} aria-label="팀 메시지 보내기">
                 <Icon>
                   <path d="M22 2 11 13" />
                   <path d="M22 2 15 22 11 13 2 9 22 2Z" />

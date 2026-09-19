@@ -39,6 +39,9 @@ export const api = {
   getSpace: (id) => request(`/spaces/${id}`),
   getGraph: (id) => request(`/spaces/${id}/graph`),
   listArtifacts: (spaceId) => request(`/spaces/${spaceId}/artifacts`),
+  listMessages: (spaceId) => request(`/spaces/${spaceId}/messages`),
+  sendMessage: (spaceId, body) =>
+    request(`/spaces/${spaceId}/messages`, { method: 'POST', body: JSON.stringify(body) }),
   createArtifact: (spaceId, body) =>
     request(`/spaces/${spaceId}/artifacts`, { method: 'POST', body: JSON.stringify(body) }),
   getArtifact: (id) => request(`/artifacts/${id}`),
