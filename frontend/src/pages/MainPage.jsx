@@ -467,10 +467,6 @@ function MainPage() {
     setCopiedType("");
   };
 
-  const getInviteLink = (space) => {
-    return `${window.location.origin}/join/${space.inviteCode}`;
-  };
-
   const copyText = async (text, type) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -964,33 +960,6 @@ function MainPage() {
             </div>
 
             <div className="share-list">
-              <div className="share-row">
-                <div className="share-info">
-                  <span className="share-label">
-                    초대 링크
-                  </span>
-
-                  <span className="share-value">
-                    {getInviteLink(inviteSpace)}
-                  </span>
-                </div>
-
-                <button
-                  className="share-copy-button"
-                  onClick={() =>
-                    copyText(
-                      getInviteLink(inviteSpace),
-                      "link"
-                    )
-                  }
-                >
-                  <CopyIcon />
-                  {copiedType === "link"
-                    ? "복사됨"
-                    : "복사"}
-                </button>
-              </div>
-
               <div className="share-row">
                 <div className="share-info">
                   <span className="share-label">
